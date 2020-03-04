@@ -38,6 +38,7 @@ if __name__ == '__main__':
     main_parser.add_argument("--lr", type=float, default=1e-3)
     main_parser.add_argument("--iters_m", type=int, default=1000)
     main_parser.add_argument("--device", type=str, default="cpu")
+    main_parser.add_argument("--batch_size", type=int, default=16)
 
     main_args = main_parser.parse_args()
 

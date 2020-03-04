@@ -16,6 +16,7 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     iters_y_opt = main_args.iters_y_opt
     iters_e = main_args.iters_e
     learning_rate = main_args.lr
+    batch_size = main_args.batch_size
 
     # Finding y_true
     print('Finding y_true')
@@ -49,31 +50,49 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     optimizer_E_step = torch.optim.Adam(kge_model.parameters(), lr=learning_rate)
     optimizer_E_step.zero_grad()
 
-    #H_ids = H_ids[:5]
-    #O_ids = O_ids[:5]
-    for _ in range(main_args.iters_e):
+    O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
+    H_y_pred = torch.zeros(len(H_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
+    for _ in range(iters_e):
         # compute beta of hidden triplets from KGE model
-        loss = torch.Tensor([0])
-        print('computing KGE embeddings (hidden)')
-        H_y_pred = torch.zeros(len(H_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
-        for tid in tqdm(H_ids):
-            triplet = id2triplet[tid]
-            y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
-            loss += F.mse_loss(y_pred, y_opt[tid-offset])
-            H_y_pred[tid-offset] += y_pred.detach()
-        print('computing KGE embeddings (observed)')
-        O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
-        for tid in tqdm(O_ids):
-            triplet = id2triplet[tid]
-            y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
-            loss += F.mse_loss(y_pred.type('torch.FloatTensor'), y_true[tid].type('torch.FloatTensor'))
-            O_y_pred[tid] = y_pred.detach()
+        cur_batch = 0
+        while cur_batch < len(O_ids):
+            print('computing KGE embeddings (observed)')
+            loss = torch.Tensor([0])
+            O_ids_local = O_ids[cur_batch:cur_batch+batch_size]
+            for tid in tqdm(O_ids_local):
+                triplet = id2triplet[tid]
+                y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+                loss += F.mse_loss(y_pred.type('torch.FloatTensor'), y_true[tid].type('torch.FloatTensor')) / len(O_ids_local)
+                O_y_pred[tid] = y_pred.detach()
+            try:
+                loss.backward()
+                optimizer_E_step.step()
+            except:
+                print('loss skipped')
+            cur_batch += batch_size
+            print('E-loss (observed): {}'.format(loss))
+            print('y_true: {}'.format(y_true[O_ids_local]))
+            print('--------------')
 
-        loss.backward()
-        optimizer_E_step.step()
-        print('E-loss: {}'.format(loss))
-        print('y_opt: {}'.format(y_opt))
-        print('--------------')
+        cur_batch = 0
+        while cur_batch < len(H_ids):
+            print('computing KGE embeddings (hidden)')
+            loss = torch.Tensor([0])
+            H_ids_local = H_ids[cur_batch:cur_batch+batch_size]
+            for tid in tqdm(H_ids_local):
+                triplet = id2triplet[tid]
+                y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+                loss += F.mse_loss(y_pred, y_opt[tid-offset]) / len(H_ids_local)
+                H_y_pred[tid-offset] = y_pred.detach()
+            try:
+                loss.backward()
+                optimizer_E_step.step()
+            except:
+                print('loss skipped')
+            cur_batch += batch_size
+            print('E-loss (hidden): {}'.format(loss))
+            print('y_opt: {}'.format(y_opt[H_ids_local]))
+            print('--------------')
 
     # save a data structure of id2beta dictionary
     id2betas = {}
