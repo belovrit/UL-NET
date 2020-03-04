@@ -21,9 +21,9 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     print('Finding y_true')
     num_observed = len(O_ids)
     offset = num_observed
-    y_true = torch.empty(num_observed, device=main_args.device)
+    y_true = torch.FloatTensor([0]*num_observed, device=main_args.device)
     for tid in tqdm(O_ids):
-        y_true[tid] = id2conf[0] #TODO: optimize away this code
+        y_true[tid] += id2conf[0] #TODO: optimize away this code
 
     # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
     def get_prob(x):
@@ -50,21 +50,22 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     optimizer_E_step.zero_grad()
     for _ in range(main_args.iters_e):
         # compute beta of hidden triplets from KGE model
+        loss = torch.Tensor([0])
         print('computing KGE embeddings (hidden)')
         H_y_pred = torch.zeros(len(H_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
         for tid in tqdm(H_ids[0:2]):
             triplet = id2triplet[tid]
-            H_y_pred[tid-offset] += torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+            y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+            loss += F.mse_loss(y_pred, y_opt[tid])
+            H_y_pred[tid] += y_pred.detach()
         print('computing KGE embeddings (observed)')
         O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
         for tid in tqdm(O_ids[0:2]):
             triplet = id2triplet[tid]
-            O_y_pred[tid] += torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+            y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+            loss += F.mse_loss(y_pred.type('torch.FloatTensor'), y_true[tid].type('torch.FloatTensor'))
+            O_y_pred[tid] = y_pred.detach()
 
-        # Loss (y*, beta, O_triplets, H_triplets)
-        O_loss = torch.sum((y_true[0:2].detach() - O_y_pred[0:2]) ** 2) / len(O_ids)
-        H_loss = torch.sum((y_opt[0:2].detach() - H_y_pred[0:2]) ** 2) / len(H_ids)
-        loss = (O_loss)/2
         loss.backward()
         optimizer_E_step.step()
         print('E-loss: {}'.format(loss))

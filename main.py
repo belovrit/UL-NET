@@ -32,7 +32,7 @@ if __name__ == '__main__':
                             (train.tsv, val.tsv, test.tsv). Default: ppi5k")
     main_parser.add_argument("--preprocess", action="store_true")
     main_parser.add_argument("--iters", type=int, default=2)
-    main_parser.add_argument("--iters_y_opt", type=int, default=1)
+    main_parser.add_argument("--iters_y_opt", type=int, default=2)
     main_parser.add_argument("--iters_e", type=int, default=2)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
@@ -73,7 +73,7 @@ if __name__ == '__main__':
         print("EM iteration {}".format(i))
         id2betas, id2ystars = e_step(data_dict, main_args, w.detach(), y_opt, kge_model)
         new_weights = m_step(id2betas, id2ystars, main_args.lr,
-                             main_args.alpha, main_args.iters_m)
+                             main_args.alpha_beta, main_args.iters_m)
         data_dict['weights'] = new_weights
 
     #print("Evaluating...")
