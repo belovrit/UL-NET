@@ -133,6 +133,7 @@ def init_globals(fi_name_list_shirley):
         rule_name = generate_rule()
         rules.add(rule_name)
         rule2weight_idx[rule_name] = weight_idx
+        weight_idx += 1
 
     # TODO: initialize weight tensor of dimension len(rules)
 
