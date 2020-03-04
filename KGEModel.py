@@ -53,11 +53,6 @@ class KGEModel(nn.Module):
         if model_name == 'ComplEx' and (not double_entity_embedding or not double_relation_embedding):
             raise ValueError('ComplEx should use --double_entity_embedding and --double_relation_embedding')
 
-        self.xxx = nn.Parameter(torch.Tensor([1,1]), requires_grad=True)
-
-    def debug(self):
-        return self.xxx
-
     def forward(self, h, r, t, main_args, mode='simple'):
         cvtTensor = lambda x: torch.LongTensor([int(x)], device=main_args.device)
         #ho, ro, to = cvtTensor(h), cvtTensor(r), cvtTensor(t)

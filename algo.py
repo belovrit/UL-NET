@@ -53,14 +53,14 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         loss = torch.Tensor([0])
         print('computing KGE embeddings (hidden)')
         H_y_pred = torch.zeros(len(H_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
-        for tid in tqdm(H_ids[0:2]):
+        for tid in tqdm(H_ids):
             triplet = id2triplet[tid]
             y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
             loss += F.mse_loss(y_pred, y_opt[tid])
             H_y_pred[tid] += y_pred.detach()
         print('computing KGE embeddings (observed)')
         O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
-        for tid in tqdm(O_ids[0:2]):
+        for tid in tqdm(O_ids):
             triplet = id2triplet[tid]
             y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
             loss += F.mse_loss(y_pred.type('torch.FloatTensor'), y_true[tid].type('torch.FloatTensor'))
@@ -76,9 +76,9 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     id2betas = {}
     id2ystars = {}
     print('linking the beta and y_opts')
-    for tid in tqdm(O_ids[0:2]):
+    for tid in tqdm(O_ids):
         id2betas[tid] = O_y_pred #TODO: optimize away this code
-    for tid in tqdm(H_ids[0:2]):
+    for tid in tqdm(H_ids):
         id2ystars[tid] = y_opt[tid] #TODO: optimize away this code
         id2betas[tid] = H_y_pred #TODO: optimize away this code
 
