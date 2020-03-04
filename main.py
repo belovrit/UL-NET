@@ -21,6 +21,8 @@ if __name__ == '__main__':
     main_parser.add_argument("--iters", type=int, default=2)
     main_parser.add_argument("--alpha", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
+    main_parser.add_argument("--m_iters", type=int, default=1000)
+
     main_args = main_parser.parse_args()
 
     time = str(datetime.datetime.now()).replace(' ', '_')
@@ -39,11 +41,14 @@ if __name__ == '__main__':
 
     data_dict['weights'] = init_weights(data_dict['rules'])
 
+    print(data_dict.keys())
+
     print("Start training...")
     for i in range(main_args.iters):
         print("EM iteration {}".format(i))
         id2betas, id2ystars = e_step(data_dict, main_args.alpha)
-        new_weights = m_step(id2betas, id2ystars, main_args.lr, main_args.alpha)
+        new_weights = m_step(id2betas, id2ystars, main_args.lr,
+                             main_args.alpha, main_args.m_iters)
         data_dict['weights'] = new_weights
 
     #print("Evaluating...")

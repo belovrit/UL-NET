@@ -7,12 +7,12 @@ Triplet = namedtuple('Triplet', ['h','r','t'])
 Grounding = namedtuple('Grounding', ['head', 'body'])
 
 tid = 0
-O2conf = {}
+id2conf = {}
 triplet2id = {}
 id2triplet = {}
 hr2t = {}
-O_triplets = set()
-H_triplets = set()
+O_ids = set()
+H_ids = set()
 entities = set()
 relations = set()
 
@@ -21,7 +21,7 @@ rule2weight_idx = {}
 rules = set()
 
 def generate_ArelatedToB_and_BrelatedToC_imply_ArelatedToC():
-    global tid, rule2groundings, H_triplets, id2triplet, triplet2id
+    global tid, rule2groundings, H_ids, id2triplet, triplet2id
     rule_name = 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC'
     num_rules = 0
     r_b0 = '0'
@@ -29,15 +29,15 @@ def generate_ArelatedToB_and_BrelatedToC_imply_ArelatedToC():
     r_h = '0'
     rule2groundings[rule_name] = []
     print('Loading {} Rules'.format(rule_name))
-    for tid_O in tqdm(O_triplets):
+    for tid_O in tqdm(O_ids):
         triplet_b0 = id2triplet[tid_O]
         if triplet_b0.r == r_b0 and (triplet_b0.t,r_b1) in hr2t:
             for t in hr2t[(triplet_b0.t,r_b1)]:
                 triplet_b1 = Triplet(triplet_b0.t, r_b1, t)
-                assert triplet2id[triplet_b1] in O_triplets
+                assert triplet2id[triplet_b1] in O_ids
                 triplet_h = Triplet(triplet_b0.h, r_h, t)
-                if triplet_h not in triplet2id: # i.e. not in O_triplets.union(H_triplets)
-                    H_triplets.add(tid)
+                if triplet_h not in triplet2id: # i.e. not in O_ids.union(H_ids)
+                    H_ids.add(tid)
                     id2triplet[tid] = triplet_h
                     triplet2id[triplet_h] = tid
                     assert len(id2triplet) == len(triplet2id)
@@ -49,7 +49,7 @@ def generate_ArelatedToB_and_BrelatedToC_imply_ArelatedToC():
     return rule_name
 
 def generate_AcausesB_and_BcausesC_imply_AcausesC():
-    global tid, rule2groundings, H_triplets, id2triplet, triplet2id
+    global tid, rule2groundings, H_ids, id2triplet, triplet2id
     rule_name = 'AcausesB_and_BcausesC_imply_AcausesC'
     num_rules = 0
     r_b0 = '22'
@@ -57,15 +57,15 @@ def generate_AcausesB_and_BcausesC_imply_AcausesC():
     r_h = '22'
     rule2groundings[rule_name] = []
     print('Loading {} Rules'.format(rule_name))
-    for tid_O in tqdm(O_triplets):
+    for tid_O in tqdm(O_ids):
         triplet_b0 = id2triplet[tid_O]
         if triplet_b0.r == r_b0 and (triplet_b0.t,r_b1) in hr2t:
             for t in hr2t[(triplet_b0.t,r_b1)]:
                 triplet_b1 = Triplet(triplet_b0.t, r_b1, t)
-                assert triplet2id[triplet_b1] in O_triplets
+                assert triplet2id[triplet_b1] in O_ids
                 triplet_h = Triplet(triplet_b0.h, r_h, t)
-                if triplet_h not in triplet2id: # i.e. not in O_triplets.union(H_triplets)
-                    H_triplets.add(tid)
+                if triplet_h not in triplet2id: # i.e. not in O_ids.union(H_ids)
+                    H_ids.add(tid)
                     id2triplet[tid] = triplet_h
                     triplet2id[triplet_h] = tid
                     assert len(id2triplet) == len(triplet2id)
@@ -77,13 +77,13 @@ def generate_AcausesB_and_BcausesC_imply_AcausesC():
     return rule_name
 
 def generate_notHidden():
-    global rule2groundings, H_triplets
+    global rule2groundings, H_ids
     # assert that this is the last generate function!!!
     rule_name = 'notHidden'
     num_rules = 0
     rule2groundings[rule_name] = []
     print('Loading {} Rules'.format(rule_name))
-    for tid_H in tqdm(H_triplets):
+    for tid_H in tqdm(H_ids):
         triplet_h = id2triplet[tid_H]
         grounding = Grounding(triplet_h, [])
         rule2groundings[rule_name].append(grounding)
@@ -93,7 +93,7 @@ def generate_notHidden():
 
 def init_globals(fi_name_list_shirley):
     assert len(fi_name_list_shirley) # do we want to include valid and test data??
-    global tid,triplet2id,id2triplet,hr2t,O_triplets,H_triplets,\
+    global tid,triplet2id,id2triplet,hr2t,O_ids,H_ids,\
             entities,relations,rule2groundings,rule2weight_idx,rules
 
     for fi_name in fi_name_list_shirley:
@@ -106,17 +106,19 @@ def init_globals(fi_name_list_shirley):
             if triplet not in triplet2id:
                 id2triplet[tid] = triplet
                 triplet2id[triplet] = tid
-                O2conf[tid] = c
                 assert len(id2triplet) == len(triplet2id)
-                tid += 1
-            if (h,r) not in hr2t:
-                hr2t[(h,r)] = []
-            hr2t[(h,r)].append(t)
 
-            O_triplets.add(tid)
-            entities.add(h)
-            relations.add(r)
-            entities.add(t)
+                id2conf[tid] = float(c)
+                O_ids.add(tid)
+
+                if (h,r) not in hr2t:
+                    hr2t[(h,r)] = []
+                hr2t[(h,r)].append(t)
+                entities.add(h)
+                relations.add(r)
+                entities.add(t)
+
+                tid += 1
         fi.close()
 
     rule_generators = [\
@@ -131,7 +133,6 @@ def init_globals(fi_name_list_shirley):
         rule_name = generate_rule()
         rules.add(rule_name)
         rule2weight_idx[rule_name] = weight_idx
-        weight_idx += 1
 
     # TODO: initialize weight tensor of dimension len(rules)
 
@@ -140,19 +141,19 @@ def prepare_data(data_path):
     init_globals(data_file_shirley_list)
 
     # this line takes a long time
-    global tid,triplet2id,id2triplet,hr2t,O_triplets,H_triplets,\
-            entities,relations,rule2groundings,rule2weight_idx,rules
+    global tid, triplet2id, id2triplet, hr2t, O_ids, H_ids, \
+        entities, relations, rule2groundings, rule2weight_idx, rules
     assert len(rules) == len(rule2weight_idx) == len(rule2groundings)
     assert len(id2triplet) == len(triplet2id)
     print('===========================')
     print('number of triplet2id:')
     print(len(triplet2id))
     print('---------------------------')
-    print('number of O_triplets:')
-    print(len(O_triplets))
+    print('number of O_ids:')
+    print(len(O_ids))
     print('---------------------------')
-    print('number of H_triplets:')
-    print(len(H_triplets))
+    print('number of H_ids:')
+    print(len(H_ids))
     print('---------------------------')
     print('number of entities:')
     print(len(entities))
@@ -168,9 +169,9 @@ def prepare_data(data_path):
         print(len(rule2groundings[rule_name]))
 
     return {'triplet2id': triplet2id, 'id2triplet': id2triplet,
-            'O_triplets': O_triplets, 'H_triplets': H_triplets,
+            'O_ids': O_ids, 'H_ids': H_ids,
             'entities': entities, 'relations': relations,
             'rules': rules, 'rule2groundings': rule2groundings,
-            'rule2weight_idx': rule2weight_idx, 'id2conf': O2conf}
+            'rule2weight_idx': rule2weight_idx, 'id2conf': id2conf}
 
     # cleanup takes a long time too

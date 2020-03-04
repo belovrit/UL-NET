@@ -3,8 +3,8 @@ import numpy as np
 def e_step(data_dict, alpha):
     rule2groundings = data_dict['rule2groundings']
     id2conf = data_dict['id2conf']
-    O_triplets = data_dict['O_triplets']
-    H_triplets = data_dict['H_triplets'],
+    O_ids = data_dict['O_ids']
+    H_ids = data_dict['H_ids'],
 
     # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
 
@@ -20,7 +20,7 @@ def e_step(data_dict, alpha):
 
     return id2betas, id2ystars
 
-def m_step(id2betas, id2ystars, lr, alpha):
+def m_step(id2betas, id2ystars, lr, alpha, iters):
 
     # calculate delta_w
 
