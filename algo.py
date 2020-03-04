@@ -48,6 +48,9 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
 
     optimizer_E_step = torch.optim.Adam(kge_model.parameters(), lr=learning_rate)
     optimizer_E_step.zero_grad()
+
+    #H_ids = H_ids[:5]
+    #O_ids = O_ids[:5]
     for _ in range(main_args.iters_e):
         # compute beta of hidden triplets from KGE model
         loss = torch.Tensor([0])
@@ -56,8 +59,8 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         for tid in tqdm(H_ids):
             triplet = id2triplet[tid]
             y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
-            loss += F.mse_loss(y_pred, y_opt[tid])
-            H_y_pred[tid] += y_pred.detach()
+            loss += F.mse_loss(y_pred, y_opt[tid-offset])
+            H_y_pred[tid-offset] += y_pred.detach()
         print('computing KGE embeddings (observed)')
         O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
         for tid in tqdm(O_ids):
