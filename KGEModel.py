@@ -57,12 +57,11 @@ class KGEModel(nn.Module):
         cvtTensor = lambda x: torch.LongTensor([int(x)], device=main_args.device)
         #ho, ro, to = cvtTensor(h), cvtTensor(r), cvtTensor(t)
         ho, ro, to = torch.LongTensor([int(h)]), torch.LongTensor([int(r)]), torch.LongTensor([int(t)])
-        return ho
-        model_func = { \
-            'TransE': self.TransE, \
-            'DistMult': self.DistMult, \
-            'ComplEx': self.ComplEx, \
-            'RotatE': self.RotatE, \
+        model_func = {
+            'TransE': self.TransE,
+            'DistMult': self.DistMult,
+            'ComplEx': self.ComplEx,
+            'RotatE': self.RotatE,
             }
         assert self.model_name in model_func
         hd = torch.index_select(
@@ -130,3 +129,28 @@ class KGEModel(nn.Module):
 
         if mode == 'head-batch':
             re_score = re_relation * re_tail + im_relation * im_tail
+
+    def predict(self, head, rel, tail, model_name, mode):
+        ho = torch.tensor([int(head)], dtype=torch.float64)
+        ro = torch.tensor([int(rel)], dtype=torch.float64)
+        to = torch.tensor([int(tail)], dtype=torch.float64)
+        model_func = {
+            'TransE': self.TransE,
+            'DistMult': self.DistMult,
+            'ComplEx': self.ComplEx,
+            'RotatE': self.RotatE,
+            }
+        hd = torch.index_select(
+            self.entity_embedding,
+            dim=0,
+            index=ho).unsqueeze(1)
+        rn = torch.index_select(
+            self.relation_embedding,
+            dim=0,
+            index=ro).unsqueeze(1)
+        tl = torch.index_select(
+            self.entity_embedding,
+            dim=0,
+            index=to).unsqueeze(1)
+        score = model_func[model_name](hd, rn, tl, mode)
+        return score

@@ -9,7 +9,7 @@ import torch
 
 from algo import e_step, m_step
 from KGEModel import KGEModel
-
+from eval import *
 
 # if './' not in sys.path:
 #     sys.path.append('./')
@@ -74,4 +74,8 @@ if __name__ == '__main__':
         m_step(data_dict, id2betas, id2ystars, w, main_args.lr, main_args.alpha_beta, main_args.iters_m)
 
 
-    #print("Evaluating...")
+    print("Evaluating...")
+    tester = Tester(kge_model)
+    tester.load_test_triplets_conf_task(join(get_data_path(), main_args.data))
+    print("Mean Square Error: {}".format(tester.get_mse()))
+
