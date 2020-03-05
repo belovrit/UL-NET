@@ -38,7 +38,7 @@ if __name__ == '__main__':
     main_parser.add_argument("--lr", type=float, default=1e-3)
     main_parser.add_argument("--iters_m", type=int, default=1000)
     main_parser.add_argument("--device", type=str, default="cpu")
-    main_parser.add_argument("--batch_size", type=int, default=16)
+    main_parser.add_argument("--batch_size", type=int, default=640)
 
     main_args = main_parser.parse_args()
 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     # Initialize y_opt and w
     w = torch.randn(len(data_dict['rules']), requires_grad=True, device=main_args.device) # load this from M-step
-    y_opt = torch.randn(len(data_dict['H_ids']), requires_grad=True, device=main_args.device)
+    y_opt = torch.randn(len(data_dict['id2triplet']), requires_grad=True, device=main_args.device)
 
     print("Start training...")
     for i in range(main_args.iters):
