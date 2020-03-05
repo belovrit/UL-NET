@@ -78,4 +78,5 @@ if __name__ == '__main__':
     tester = Tester(kge_model)
     tester.load_test_triplets_conf_task(join(get_data_path(), main_args.data))
     print("Mean Square Error: {}".format(tester.get_mse()))
+    print("Mean Absolute Error: {}".format(tester.get_mae()))
 
