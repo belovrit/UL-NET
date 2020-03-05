@@ -138,8 +138,6 @@ def m_step(data_dict, id2betas, id2ystars, w, lr, alpha_beta, iters):
             # update weights
             w[w_idx] += lr * accu_w_grad[w_idx]
 
-
-
 def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w, y_opt, main_args):
     pw_memoized = torch.zeros_like(w, device=main_args.device)
     for rule in rule2groundings:
@@ -175,15 +173,15 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
             l0 = get_prob(y_opt[ids0])
             l1 = get_prob(y_opt[ids1])
             l2 = get_prob(y_opt[ids2])
-            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND'),l0), 'IMPLY')
+            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0)),l0), 'IMPLY', len(l0))
         elif rule == 'AcausesB_and_BcausesC_imply_AcausesC':
             l0 = get_prob(y_opt[ids0])
             l1 = get_prob(y_opt[ids1])
             l2 = get_prob(y_opt[ids2])
-            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND'),l0), 'IMPLY')
+            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0)),l0), 'IMPLY', len(l0))
         elif rule == 'notHidden':
             l0 = get_prob(y_opt[ids0])
-            grounding_confidence = soft_logic(l0, 'NOT')
+            grounding_confidence = soft_logic(l0, 'NOT', len(l0))
         else:
             assert False
         pw_memoized[widx] = w[widx] * torch.sum(grounding_confidence)
@@ -192,21 +190,31 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
     return pw
 
 # soft logic and EM functions
-def soft_logic(args, logic): # TODO: make gumbel softmax
-    one, hinge, zero = torch.Tensor([1]), torch.Tensor([0.75]), torch.Tensor([0])
+def soft_logic(args, logic, dim): # TODO: make gumbel softmax
+    one, hinge, zero = torch.ones(dim), 0.75*torch.ones(dim), torch.zeros(dim)
     if logic == 'IMPLY':
         assert len(args) == 2
         arg1,arg2 = args
-        return torch.min(hinge, one - arg1 + arg2)
+        forward_logic = torch.min(hinge, one - arg1 + arg2)
+        memoized_cmp = torch.stack((hinge, one - arg1 + arg2),dim=0)
+        backward_logic = torch.sum(F.softmin(memoized_cmp, dim=0)*memoized_cmp,dim=0)
     elif logic == 'AND':
         assert len(args) == 2
         arg1,arg2 = args
-        return torch.max(zero, arg1 + arg2 - one)
+        forward_logic = torch.max(zero, arg1 + arg2 - one)
+        memoized_cmp = torch.stack((zero, arg1 + arg2 - one),dim=0)
+        backward_logic = torch.sum(F.softmax(memoized_cmp, dim=0)*memoized_cmp,dim=0)
     elif logic == 'OR':
         assert len(args) == 2
         arg1,arg2 = args
-        return torch.min(one, arg1 + arg2)
+        forward_logic = torch.min(one, arg1 + arg2)
+        memoized_cmp = torch.stack((one, arg1 + arg2),dim=0)
+        backward_logic = torch.sum(F.softmin(memoized_cmp, dim=0)*memoized_cmp,dim=0)
     elif logic == 'NOT':
         assert type(args) != list and type(args) != tuple
         arg = args
-        return one-arg
+        forward_logic = one - arg
+        backward_logic = one - arg
+    else:
+        assert False
+    return (forward_logic - backward_logic).detach() + backward_logic
