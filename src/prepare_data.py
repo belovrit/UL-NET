@@ -42,7 +42,11 @@ def generate_ArelatedToB_and_BrelatedToC_imply_ArelatedToC():
                     triplet2id[triplet_h] = tid
                     assert len(id2triplet) == len(triplet2id)
                     tid += 1
-                grounding = Grounding(triplet_h, [triplet_b0, triplet_b1])
+                h_tid = triplet2id[triplet_h]
+                b0_tid = triplet2id[triplet_b0]
+                b1_tid = triplet2id[triplet_b1]
+                grounding = Grounding(h_tid, [b0_tid, b1_tid])
+                #grounding = Grounding(triplet_h, [triplet_b0, triplet_b1])
                 rule2groundings[rule_name].append(grounding)
                 num_rules += 1
     print('Loaded {} groundings'.format(num_rules))
@@ -70,7 +74,10 @@ def generate_AcausesB_and_BcausesC_imply_AcausesC():
                     triplet2id[triplet_h] = tid
                     assert len(id2triplet) == len(triplet2id)
                     tid += 1
-                grounding = Grounding(triplet_h, [triplet_b0, triplet_b1])
+                h_tid = triplet2id[triplet_h]
+                b0_tid = triplet2id[triplet_b0]
+                b1_tid = triplet2id[triplet_b1]
+                grounding = Grounding(h_tid, [b0_tid, b1_tid])
                 rule2groundings[rule_name].append(grounding)
                 num_rules += 1
     print('Loaded {} groundings'.format(num_rules))
@@ -85,7 +92,8 @@ def generate_notHidden():
     print('Loading {} Rules'.format(rule_name))
     for tid_H in tqdm(H_ids):
         triplet_h = id2triplet[tid_H]
-        grounding = Grounding(triplet_h, [])
+        grounding = Grounding(tid_H, [])
+        #grounding = Grounding(triplet_h, [])
         rule2groundings[rule_name].append(grounding)
         num_rules += 1
     print('Loaded {} groundings'.format(num_rules))

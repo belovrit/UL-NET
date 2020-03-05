@@ -103,20 +103,40 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     id2ystars = {}
     print('linking the beta and y_opts')
     for tid in tqdm(O_ids+H_ids):
-        id2ystars[tid] = get_prob(y_opt[tid]) #TODO: optimize away this code
+        id2ystars[tid] = get_prob(y_opt[tid].detach()) #TODO: optimize away this code
 
     for tid in tqdm(H_ids):
-        id2betas[tid] = get_beta(H_y_pred[tid-offset]) #TODO: optimize away this code
+        id2betas[tid] = get_beta(H_y_pred[tid-offset].detach()) #TODO: optimize away this code
 
     return id2betas, id2ystars
 
-def m_step(id2betas, id2ystars, lr, alpha, iters):
-
+def m_step(data_dict, id2betas, id2ystars, w, lr, alpha_beta, iters):
+    rule2groundings = data_dict['rule2groundings']
+    id2conf = data_dict['id2conf']
+    rule2weight_idx = data_dict['rule2weight_idx']
+    accu_w_grad = np.zeros_like(w.detach().numpy())
     # calculate delta_w
+    for i in range(iters):
+        for rule, allgroundings in rule2groundings.items():
+            ground_size = len(allgroundings)
+            w_idx = rule2weight_idx[rule]
+            for ground in tqdm(allgroundings):
+                hidden = False
+                head_id = ground[0]
+                try:
+                    conf_true = id2conf[head_id]
+                    ystar = id2ystars[head_id]
+                    accu_w_grad[w_idx] += (conf_true - ystar) / ground_size
+                except KeyError:
+                    hidden = True
+                if hidden:
+                    beta = id2betas[head_id]
+                    ystar = id2ystars[head_id]
+                    pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
 
-    # update weights
-
-    return [0, 0, 0]
+                    accu_w_grad[w_idx] += (pred_beta - ystar) / ground_size
+            # update weights
+            w[w_idx] += lr * accu_w_grad[w_idx]
 
 
 
@@ -131,20 +151,23 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
             if rule == 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC':
                 assert len(body) == 2
                 t1, t2 = body
-                id0, id1, id2 = triplet2id[head], triplet2id[t1],triplet2id[t2]
+                id0, id1, id2 = head, t1, t2
+                #id0, id1, id2 = triplet2id[head], triplet2id[t1],triplet2id[t2]
                 ids0.append(int(id0))
                 ids1.append(int(id1))
                 ids2.append(int(id2))
             elif rule == 'AcausesB_and_BcausesC_imply_AcausesC':
                 assert len(body) == 2
                 t1, t2 = body
-                id0, id1, id2 = triplet2id[head], triplet2id[t1],triplet2id[t2]
+                id0, id1, id2 = head, t1, t2
+                #id0, id1, id2 = triplet2id[head], triplet2id[t1],triplet2id[t2]
                 ids0.append(int(id0))
                 ids1.append(int(id1))
                 ids2.append(int(id2))
             elif rule == 'notHidden':
                 assert len(body) == 0
-                id0 = triplet2id[head]
+                id0 = head
+                # id0 = triplet2id[head]
                 ids0.append(int(id0))
             else:
                 assert False

@@ -36,7 +36,7 @@ if __name__ == '__main__':
     main_parser.add_argument("--iters_e", type=int, default=2)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
-    main_parser.add_argument("--iters_m", type=int, default=1000)
+    main_parser.add_argument("--iters_m", type=int, default=1)
     main_parser.add_argument("--device", type=str, default="cpu")
     main_parser.add_argument("--batch_size", type=int, default=640)
 
@@ -56,9 +56,6 @@ if __name__ == '__main__':
     else:
         data_dict = load_preprocessed(save_path)
 
-    data_dict['weights'] = init_weights(data_dict['rules'])
-
-    print(data_dict.keys())
 
     # Initialize KGE Model
     n_entities = len(data_dict['entities'])
@@ -73,8 +70,8 @@ if __name__ == '__main__':
     for i in range(main_args.iters):
         print("EM iteration {}".format(i))
         id2betas, id2ystars = e_step(data_dict, main_args, w.detach(), y_opt, kge_model)
-        new_weights = m_step(id2betas, id2ystars, main_args.lr,
-                             main_args.alpha_beta, main_args.iters_m)
-        data_dict['weights'] = new_weights
+        gc.collect()
+        m_step(data_dict, id2betas, id2ystars, w, main_args.lr, main_args.alpha_beta, main_args.iters_m)
+
 
     #print("Evaluating...")
