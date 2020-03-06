@@ -109,7 +109,7 @@ class Tester(object):
 
     def get_score_batch(self, test_triplets, alpha_beta):
         kge = self.KGEModel
-        scores = [get_prob(kge.predict(int(h), int(r), int(t)), alpha_beta) for h, r, t, c in test_triplets]
+        scores = [get_prob(kge.predict(int(h), int(r), int(t)), alpha_beta).item() for h, r, t, c in test_triplets]
         return scores
 
     def get_mse(self, alpha_beta, verbose=True, save_dir='', epoch=0):
@@ -121,7 +121,7 @@ class Tester(object):
         mse = np.sum(np.square(scores - c_batch))
         mse = mse / N
 
-        return mse
+        return mse.item(), scores
 
     def get_mae(self, alpha_beta, verbose=False, save_dir='', epoch=0):
         test_triplets = self.test_triplets
@@ -131,7 +131,7 @@ class Tester(object):
         mae = np.sum(np.absolute(scores - c_batch))
 
         mae = mae / N
-        return mae
+        return mae.item()
 
     def get_t_ranks(self, h, r, ts, alpha_beta):
         """

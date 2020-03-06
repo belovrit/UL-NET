@@ -1,8 +1,8 @@
 from os.path import join, getctime
-import pickle, csv
+import pickle, csv, json
 import torch
 import glob
-from KGEModel import *
+from KGEModel import KGEModel
 
 def save_preprocessed(dict_obj, save_path):
     path = join(save_path, 'data_dict.pickle')
@@ -11,8 +11,8 @@ def save_preprocessed(dict_obj, save_path):
         pickle.dump(dict_obj, fp)
 
 
-def load_preprocessed(save_path):
-    path = join(save_path, 'data_dict.pickle')
+def load_preprocessed(load_path):
+    path = join(load_path, 'data_dict.pickle')
     print("Loading data pickle...")
     with open(path, 'rb') as fp:
         data_dict = pickle.load(fp)
@@ -66,3 +66,28 @@ def load_trained_model(load_path):
     trained_model = KGEModel(model_name, n_entities, n_relations, hidden_dim, gamma)
     trained_model.load_state_dict(torch.load(best_trained_model_path))
     return trained_model
+
+
+def save_eval_result(dict_obj, save_path):
+    path = join(save_path, 'eval_result.json')
+    print("Saving eval result...")
+    with open(path, 'w') as fp:
+        json.dump(dict_obj, fp)
+
+
+def save_dict(name, dict_obj, save_path):
+    filename = "{}.pickle".format(name)
+    path = join(save_path, filename)
+    print("Saving pickle...")
+    with open(path, 'wb') as fp:
+        pickle.dump(dict_obj, fp)
+
+
+def load_dict(name, load_path):
+    filename = "{}.pickle".format(name)
+    path = join(load_path, filename)
+    print("Loading pickle...")
+    with open(path, 'rb') as fp:
+        data_dict = pickle.load(fp)
+
+    return data_dict

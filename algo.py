@@ -165,7 +165,7 @@ def m_step(data_dict, id2betas, id2ystars, w, main_args):
                     loss += (pred_beta - ystar) * (pred_beta - ystar)
             # update weights
             w[w_idx] += lr * accu_w_grad[w_idx]
-        print("M_step iteration {}: Loss = {}".format(i, loss))
+        #print("M_step iteration {}: Loss = {}".format(i, loss))
 
 def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w, y_opt, main_args):
     pw_memoized = torch.zeros_like(w.float(), device=main_args.device)

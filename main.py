@@ -25,17 +25,19 @@ if __name__ == '__main__':
     main_parser.add_argument("--load_model", type=str)
     main_args = main_parser.parse_args()
 
-    time = str(datetime.datetime.now()).replace(' ', '_')
-    workpath = os.path.join(get_root_path(), 'record', time)
-    data_path = join(get_data_path(), main_args.data)
-    save_path = os.path.join(get_save_path(), main_args.data)
-    ensure_dir(workpath)
-    ensure_dir(save_path)
+
     if main_args.load_model is not None:
+        workpath = main_args.load_model
         print("Loading trained model...")
         kge_model = load_trained_model(main_args.load_model)
-        print(kge_model.state_dict())
+        #print(kge_model.state_dict())
     else:
+        time = str(datetime.datetime.now()).replace(' ', '_')
+        workpath = os.path.join(get_root_path(), 'record', time)
+        data_path = join(get_data_path(), main_args.data)
+        save_path = os.path.join(get_save_path(), main_args.data)
+        ensure_dir(workpath)
+        ensure_dir(save_path)
         if main_args.preprocess:
             data_dict = prepare_data(data_path)
             gc.collect()
@@ -67,18 +69,23 @@ if __name__ == '__main__':
                              dtype=torch.float32, device=main_args.device)
             # w = torch.randn(len(data_dict['rules']), requires_grad=True,
             #                 device=main_args.device)
+            # save_dict("id2betas_{}".format(i), id2betas, workpath)
+            # save_dict("id2ystars_{}".format(i), id2ystars, workpath)
             gc.collect()
             m_step(data_dict, id2betas, id2ystars, w, main_args)
-            print(old_w)
-            print(w)
+            # print(old_w)
+            # print(w)
 
         save_trained_model(workpath, kge_model)
 
     print("Evaluating...")
+    eval_result = {}
     tester = Tester(kge_model)
     tester.load_test_triplets_conf_task(join(get_data_path(), main_args.data))
-    print("Mean Square Error: {}".format(tester.get_mse(main_args.alpha_beta).detach()))
-    print("Mean Absolute Error: {}".format(tester.get_mae(main_args.alpha_beta).detach()))
-
+    eval_result["MSE"], eval_result["scores"] = tester.get_mse(main_args.alpha_beta)
+    eval_result["MAE"] = tester.get_mae(main_args.alpha_beta)
+    print("Mean Square Error: {}".format(eval_result["MSE"]))
+    print("Mean Absolute Error: {}".format(eval_result["MAE"]))
+    save_eval_result(eval_result, workpath)
 
 
