@@ -3,10 +3,10 @@ import random
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-
+from time import time
 
 def get_beta(x, alpha_beta):
-    beta = alpha_beta * F.sigmoid(x)
+    beta = alpha_beta * torch.sigmoid(x)
     return beta
 
 def get_prob(x, alpha_beta):
@@ -61,12 +61,17 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     cur_batch = 0
     for _ in range(iters_e):
         print('computing KGE embeddings (observed)')
-        loss = torch.Tensor([0])
+        # loss = torch.Tensor([0])
+        loss = torch.tensor([0], dtype=torch.float32, device=main_args.device)
         O_ids_local = O_ids[cur_batch:cur_batch+batch_size]
         for tid in tqdm(O_ids_local):
             triplet = id2triplet[tid]
-            y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args)).type('torch.FloatTensor')
-            y_true = torch.FloatTensor([float(id2conf[0])], device=main_args.device)
+            # y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args)).type('torch.FloatTensor')
+            # y_true = torch.FloatTensor([float(id2conf[0])], device=main_args.device)
+            y_pred = torch.squeeze(kge_model(triplet.h, triplet.r, triplet.t, main_args))
+            # y_pred = torch.tensor(y_pred, dtype=torch.float32, device=main_args.device)
+            y_pred = y_pred.float().detach().to(device=main_args.device)
+            y_true = torch.tensor([float(id2conf[0])], dtype=torch.float32,device=main_args.device)
             loss += F.mse_loss(y_pred, y_true) / len(O_ids_local)
             O_y_pred[tid] = y_pred.detach()
         try:
@@ -83,11 +88,14 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     cur_batch = 0
     for _ in range(iters_e):
         print('computing KGE embeddings (hidden)')
-        loss = torch.Tensor([0])
+        # loss = torch.Tensor([0])
+        loss = torch.tensor([0], dtype=torch.float32, device=main_args.device)
         H_ids_local = H_ids[cur_batch:cur_batch+batch_size]
         for tid in tqdm(H_ids_local):
             triplet = id2triplet[tid]
             y_pred = torch.squeeze(kge_model(triplet.h,triplet.r,triplet.t, main_args))
+            # y_pred = torch.tensor(y_pred, dtype=torch.float32, device=main_args.device)
+            y_pred = y_pred.float().detach().to(device=main_args.device)
             loss += F.mse_loss(y_pred, y_opt[tid]) / len(H_ids_local)
             H_y_pred[tid-offset] = y_pred.detach()
         try:
@@ -105,15 +113,19 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     id2betas = {}
     id2ystars = {}
     print('linking y_opts')
+    t = time()
     # for tid in tqdm(O_ids+H_ids):
     #     id2ystars[tid] = get_prob(y_opt[tid].detach(), alpha_beta) #TODO: optimize away this code
     all_ids = O_ids + H_ids
     id2ystars = {tid: get_prob(y_opt[tid].detach(), alpha_beta) for tid in all_ids}
+    print("linking y_opts: {} seconds".format(time() - t))
     print('linking betas')
+    t = time()
     # for tid in tqdm(H_ids):
     #     id2betas[tid] = get_beta(H_y_pred[tid-offset].detach(), alpha_beta) #TODO: optimize away this code
-    id2betas = {tid: get_beta(H_y_pred[tid-offset].detach(), alpha_beta) for tid in H_ids}
 
+    id2betas = {tid: get_beta(H_y_pred[tid-offset].detach(), alpha_beta) for tid in H_ids}
+    print("linking betas: {} seconds".format(time() - t))
     return id2betas, id2ystars
 
 def m_step(data_dict, id2betas, id2ystars, w, main_args):
@@ -124,7 +136,7 @@ def m_step(data_dict, id2betas, id2ystars, w, main_args):
     alpha_beta = main_args.alpha_beta
     iters = main_args.iters_m
     batch_size = main_args.batch_size * 3
-    accu_w_grad = np.zeros_like(w.detach().numpy())
+    accu_w_grad = np.zeros_like(w.detach().cpu().numpy())
     # calculate delta_w
     print("M-step: updating weights...")
     for i in range(iters):
@@ -140,7 +152,7 @@ def m_step(data_dict, id2betas, id2ystars, w, main_args):
                     conf_true = id2conf[head_id]
                     ystar = id2ystars[head_id]
                     accu_w_grad[w_idx] += (conf_true - ystar) / ground_size
-                    print(conf_true - ystar)
+                    # print(conf_true - ystar)
                     loss += (conf_true - ystar) * (conf_true - ystar)
                 except KeyError:
                     hidden = True
@@ -149,7 +161,7 @@ def m_step(data_dict, id2betas, id2ystars, w, main_args):
                     ystar = id2ystars[head_id]
                     pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
                     accu_w_grad[w_idx] += (pred_beta - ystar) / ground_size
-                    print(pred_beta - ystar)
+                    # print(pred_beta - ystar)
                     loss += (pred_beta - ystar) * (pred_beta - ystar)
             # update weights
             w[w_idx] += lr * accu_w_grad[w_idx]
@@ -190,15 +202,15 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
             l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
             l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
-            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0)),l0), 'IMPLY', len(l0))
+            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0), main_args.device),l0), 'IMPLY', len(l0), main_args.device)
         elif rule == 'AcausesB_and_BcausesC_imply_AcausesC':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
             l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
             l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
-            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0)),l0), 'IMPLY', len(l0))
+            grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0), main_args.device),l0), 'IMPLY', len(l0), main_args.device)
         elif rule == 'notHidden':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
-            grounding_confidence = soft_logic(l0, 'NOT', len(l0))
+            grounding_confidence = soft_logic(l0, 'NOT', len(l0), main_args.device)
         else:
             assert False
         pw_memoized[widx] = w[widx] * torch.sum(grounding_confidence)
@@ -207,8 +219,8 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
     return pw
 
 # soft logic and EM functions
-def soft_logic(args, logic, dim): # TODO: make gumbel softmax
-    one, hinge, zero = torch.ones(dim), 0.75*torch.ones(dim), torch.zeros(dim)
+def soft_logic(args, logic, dim, device): # TODO: make gumbel softmax
+    one, hinge, zero = torch.ones(dim, device=device), 0.75*torch.ones(dim, device=device), torch.zeros(dim, device=device)
     if logic == 'IMPLY':
         assert len(args) == 2
         arg1,arg2 = args

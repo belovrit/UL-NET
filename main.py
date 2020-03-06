@@ -10,16 +10,16 @@ if __name__ == '__main__':
     main_parser.add_argument("--data", type=str, default='cn15k',
                              help="the dir path where you store data")
     main_parser.add_argument("--preprocess", action="store_true")
-    main_parser.add_argument("--iters_em", type=int, default=2)
+    main_parser.add_argument("--iters_em", type=int, default=1)
     main_parser.add_argument("--model_name", type=str, default='TransE',
                              choices=['TransE', 'DistMult', 'ComplEx','RotatE'])
     main_parser.add_argument("--hidden_dim", type=int, default=16)
     main_parser.add_argument("--gamma", type=int, default=0.05)
-    main_parser.add_argument("--iters_y_opt", type=int, default=5)
-    main_parser.add_argument("--iters_e", type=int, default=5)
+    main_parser.add_argument("--iters_y_opt", type=int, default=1)
+    main_parser.add_argument("--iters_e", type=int, default=1)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
-    main_parser.add_argument("--iters_m", type=int, default=5)
+    main_parser.add_argument("--iters_m", type=int, default=1)
     main_parser.add_argument("--device", type=str, default="cpu")
     main_parser.add_argument("--batch_size", type=int, default=640)
     main_parser.add_argument("--load_model", type=str)
@@ -55,8 +55,8 @@ if __name__ == '__main__':
         # Initialize y_opt and w
         # w = torch.randn(len(data_dict['rules']), requires_grad=True, device=main_args.device) # load this from M-step
         w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                         device=main_args.device)
-        y_opt = torch.randn(len(data_dict['id2triplet']), requires_grad=True, device=main_args.device)
+                         dtype=torch.float32, device=main_args.device)
+        y_opt = torch.randn(len(data_dict['id2triplet']), dtype=torch.float32, requires_grad=True, device=main_args.device)
 
         print("Start training...")
         for i in range(main_args.iters_em):
