@@ -130,10 +130,10 @@ class KGEModel(nn.Module):
         if mode == 'head-batch':
             re_score = re_relation * re_tail + im_relation * im_tail
 
-    def predict(self, head, rel, tail, model_name, mode):
-        ho = torch.tensor([int(head)], dtype=torch.float64)
-        ro = torch.tensor([int(rel)], dtype=torch.float64)
-        to = torch.tensor([int(tail)], dtype=torch.float64)
+    def predict(self, head, rel, tail, mode='simple'):
+        ho = torch.tensor([int(head)], dtype=torch.int64)
+        ro = torch.tensor([int(rel)], dtype=torch.int64)
+        to = torch.tensor([int(tail)], dtype=torch.int64)
         model_func = {
             'TransE': self.TransE,
             'DistMult': self.DistMult,
@@ -152,5 +152,5 @@ class KGEModel(nn.Module):
             self.entity_embedding,
             dim=0,
             index=to).unsqueeze(1)
-        score = model_func[model_name](hd, rn, tl, mode)
+        score = model_func[self.model_name](hd, rn, tl, mode)
         return score

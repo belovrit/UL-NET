@@ -6,6 +6,7 @@ from os.path import join
 from src.utils import *
 import time
 from KGEModel import *
+from algo import get_beta, get_prob
 
 class Tester(object):
     class IndexScore:
@@ -102,56 +103,55 @@ class Tester(object):
             count += len(self.hr_map[h])
         print('Loaded ranking test queries. Number of (h,r,?t) queries: %d' % count)
 
-    def get_score(self, h, r, t):
-        score = np.random.rand()
-        #score = self.KGEModel.predict(int(h), int(r), int(t))
+    def get_score(self, h, r, t, alpha_beta):
+        score = get_prob(self.KGEModel.predict(int(h), int(r), int(t)), alpha_beta)
         return score
 
-    def get_score_batch(self, test_triplets):
+    def get_score_batch(self, test_triplets, alpha_beta):
         kge = self.KGEModel
-        scores = [kge.predict(int(h), int(r), int(t)) for h, r, t, c in test_triplets]
+        scores = [get_prob(kge.predict(int(h), int(r), int(t)), alpha_beta) for h, r, t, c in test_triplets]
         return scores
 
-    def get_mse(self, verbose=True, save_dir='', epoch=0):
+    def get_mse(self, alpha_beta, verbose=True, save_dir='', epoch=0):
         test_triplets = self.test_triplets
         N = len(test_triplets)
         c_batch = np.array([triplet[3] for triplet in test_triplets])
         #c_batch = np.random.rand(len(test_triplets))
-        scores = self.get_score_batch(test_triplets)
+        scores = self.get_score_batch(test_triplets, alpha_beta)
         mse = np.sum(np.square(scores - c_batch))
         mse = mse / N
 
         return mse
 
-    def get_mae(self, verbose=False, save_dir='', epoch=0):
+    def get_mae(self, alpha_beta, verbose=False, save_dir='', epoch=0):
         test_triplets = self.test_triplets
         N = len(test_triplets)
         c_batch = np.array([triplet[3] for triplet in test_triplets])
-        scores = self.get_score_batch(test_triplets)
+        scores = self.get_score_batch(test_triplets, alpha_beta)
         mae = np.sum(np.absolute(scores - c_batch))
 
         mae = mae / N
         return mae
 
-    def get_t_ranks(self, h, r, ts):
+    def get_t_ranks(self, h, r, ts, alpha_beta):
         """
         Given some t index, return the ranks for each t
         :return:
         """
         # prediction
-        scores = np.array([self.get_score(h, r, t) for t in ts])  # predict scores for t from ground truth
+        scores = np.array([self.get_score(h, r, t, alpha_beta) for t in ts])  # predict scores for t from ground truth
 
         ranks = np.ones(len(ts), dtype=int)  # initialize rank as all 1
 
         N = self.KGEModel.nentity  # pool of t: all possible ts
         for i in range(N):  # compute scores for all possible t
-            score_i = self.get_score(h, r, i)
+            score_i = self.get_score(h, r, i, alpha_beta)
             rankplus = (scores < score_i).astype(int)  # rank+1 if score<score_i
             ranks += rankplus
 
         return ranks
 
-    def ndcg(self, h, r, tw_truth):
+    def ndcg(self, h, r, tw_truth, alpha_beta):
         """
         Compute nDCG(normalized discounted cummulative gain)
         sum(score_ground_truth / log2(rank+1)) / max_possible_dcg
@@ -160,7 +160,7 @@ class Tester(object):
         """
         # prediction
         ts = [tw.index for tw in tw_truth]
-        ranks = self.get_t_ranks(h, r, ts)
+        ranks = self.get_t_ranks(h, r, ts, alpha_beta)
 
         # linear gain
         gains = np.array([tw.score for tw in tw_truth])
@@ -182,7 +182,7 @@ class Tester(object):
 
         return ndcg, exp_ndcg
 
-    def mean_ndcg(self, hr_map):
+    def mean_ndcg(self, hr_map, alpha_beta):
         """
         :param hr_map: {h:{r:{t:w}}}
         :return:
@@ -202,7 +202,7 @@ class Tester(object):
                 tw_truth = [self.IndexScore(int(t), float(w)) for t, w in tw_dict.items()]
                 tw_truth.sort(reverse=True)  # descending on w
                 #print(tw_truth)
-                ndcg, exp_ndcg = self.ndcg(h, r, tw_truth)  # nDCG with linear gain and exponential gain
+                ndcg, exp_ndcg = self.ndcg(h, r, tw_truth, alpha_beta)  # nDCG with linear gain and exponential gain
                 ndcg_sum += ndcg
                 exp_ndcg_sum += exp_ndcg
                 count += 1
@@ -212,7 +212,7 @@ class Tester(object):
                     print('mean ndcg (exponential gain) now: %f' % (exp_ndcg_sum / count))
 
                 # debug
-                ranks = self.get_t_ranks(h, r, [tw.index for tw in tw_truth])
+                ranks = self.get_t_ranks(h, r, [tw.index for tw in tw_truth], alpha_beta)
                 res.append((h,r,tw_truth, ndcg, ranks))
 
         return ndcg_sum / count, exp_ndcg_sum / count
@@ -224,5 +224,6 @@ if __name__ == '__main__':
     data_path = join(get_data_path(), 'cn15k')
     # tester.load_test_triplets_conf_task(data_path)
     tester.load_test_triplets_ranking_task(data_path)
-    print(tester.mean_ndcg(tester.hr_map))
+    alpha_beta = 1
+    print(tester.mean_ndcg(tester.hr_map, alpha_beta))
     # print(type(tester.test_triplets[0][3]))

@@ -4,6 +4,16 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
+
+def get_beta(x, alpha_beta):
+    beta = alpha_beta * F.sigmoid(x)
+    return beta
+
+def get_prob(x, alpha_beta):
+    beta = get_beta(x, alpha_beta)
+    alpha = alpha_beta - beta
+    return (alpha - 1) / (alpha + beta - 2)
+
 def e_step(data_dict, main_args, w, y_opt, kge_model):
     rule2groundings = data_dict['rule2groundings']
     id2conf = data_dict['id2conf']
@@ -25,27 +35,20 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     offset = num_observed
 
     # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
-    def get_beta(x):
-        beta = alpha_beta * F.sigmoid(x)
-        return beta
 
-    def get_prob(x):
-        beta = get_beta(x)
-        alpha = alpha_beta-beta
-        return (alpha-1)/(alpha+beta-2)
 
-    optimizer_y_opt = torch.optim.Adam([y_opt], lr=1000*learning_rate)
+    optimizer_y_opt = torch.optim.Adam([y_opt], lr=5000*learning_rate)
     optimizer_y_opt.zero_grad()
     print('Optimizing y_opt')
     for _ in range(iters_y_opt):
         pw = get_loglikelihood(get_prob, rule2groundings, rule2weight_idx,
-                               triplet2id, w, y_opt, main_args)
+                               triplet2id, w.float(), y_opt, main_args)
         loss = -pw
         loss.backward()
         optimizer_y_opt.step()
         print('y-loss: {}'.format(pw))
         print('w: {}'.format(w))
-        print('y_opt: {}'.format(get_prob(y_opt)))
+        print('y_opt: {}'.format(get_prob(y_opt, alpha_beta)))
         print('--------------')
 
     optimizer_E_step = torch.optim.Adam(kge_model.parameters(), lr=learning_rate)
@@ -101,45 +104,59 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     # save a data structure of id2beta dictionary
     id2betas = {}
     id2ystars = {}
-    print('linking the beta and y_opts')
-    for tid in tqdm(O_ids+H_ids):
-        id2ystars[tid] = get_prob(y_opt[tid].detach()) #TODO: optimize away this code
-
-    for tid in tqdm(H_ids):
-        id2betas[tid] = get_beta(H_y_pred[tid-offset].detach()) #TODO: optimize away this code
+    print('linking y_opts')
+    # for tid in tqdm(O_ids+H_ids):
+    #     id2ystars[tid] = get_prob(y_opt[tid].detach(), alpha_beta) #TODO: optimize away this code
+    all_ids = O_ids + H_ids
+    id2ystars = {tid: get_prob(y_opt[tid].detach(), alpha_beta) for tid in all_ids}
+    print('linking betas')
+    # for tid in tqdm(H_ids):
+    #     id2betas[tid] = get_beta(H_y_pred[tid-offset].detach(), alpha_beta) #TODO: optimize away this code
+    id2betas = {tid: get_beta(H_y_pred[tid-offset].detach(), alpha_beta) for tid in H_ids}
 
     return id2betas, id2ystars
 
-def m_step(data_dict, id2betas, id2ystars, w, lr, alpha_beta, iters):
+def m_step(data_dict, id2betas, id2ystars, w, main_args):
     rule2groundings = data_dict['rule2groundings']
     id2conf = data_dict['id2conf']
     rule2weight_idx = data_dict['rule2weight_idx']
+    lr = main_args.lr
+    alpha_beta = main_args.alpha_beta
+    iters = main_args.iters_m
+    batch_size = main_args.batch_size * 3
     accu_w_grad = np.zeros_like(w.detach().numpy())
     # calculate delta_w
+    print("M-step: updating weights...")
     for i in range(iters):
+        loss = 0.0
         for rule, allgroundings in rule2groundings.items():
             ground_size = len(allgroundings)
             w_idx = rule2weight_idx[rule]
-            for ground in tqdm(allgroundings):
+            random.shuffle(allgroundings)
+            for ground in tqdm(allgroundings[0:batch_size]):
                 hidden = False
                 head_id = ground[0]
                 try:
                     conf_true = id2conf[head_id]
                     ystar = id2ystars[head_id]
                     accu_w_grad[w_idx] += (conf_true - ystar) / ground_size
+                    print(conf_true - ystar)
+                    loss += (conf_true - ystar) * (conf_true - ystar)
                 except KeyError:
                     hidden = True
                 if hidden:
                     beta = id2betas[head_id]
                     ystar = id2ystars[head_id]
                     pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
-
                     accu_w_grad[w_idx] += (pred_beta - ystar) / ground_size
+                    print(pred_beta - ystar)
+                    loss += (pred_beta - ystar) * (pred_beta - ystar)
             # update weights
             w[w_idx] += lr * accu_w_grad[w_idx]
+        print("M_step iteration {}: Loss = {}".format(i, loss))
 
 def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w, y_opt, main_args):
-    pw_memoized = torch.zeros_like(w, device=main_args.device)
+    pw_memoized = torch.zeros_like(w.float(), device=main_args.device)
     for rule in rule2groundings:
         groundings = rule2groundings[rule]
         widx = rule2weight_idx[rule]
@@ -170,17 +187,17 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
             else:
                 assert False
         if rule == 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC':
-            l0 = get_prob(y_opt[ids0])
-            l1 = get_prob(y_opt[ids1])
-            l2 = get_prob(y_opt[ids2])
+            l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
+            l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
+            l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
             grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0)),l0), 'IMPLY', len(l0))
         elif rule == 'AcausesB_and_BcausesC_imply_AcausesC':
-            l0 = get_prob(y_opt[ids0])
-            l1 = get_prob(y_opt[ids1])
-            l2 = get_prob(y_opt[ids2])
+            l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
+            l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
+            l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
             grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0)),l0), 'IMPLY', len(l0))
         elif rule == 'notHidden':
-            l0 = get_prob(y_opt[ids0])
+            l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
             grounding_confidence = soft_logic(l0, 'NOT', len(l0))
         else:
             assert False
