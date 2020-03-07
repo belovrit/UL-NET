@@ -23,7 +23,8 @@ if __name__ == '__main__':
     main_parser.add_argument("--device", type=str, default="cpu")
     main_parser.add_argument("--batch_size", type=int, default=64)
     main_parser.add_argument("--load_model", type=str)
-    main_parser.add_argument("--ranking", type=str, action="store_true")
+    #main_parser.add_argument("--ranking", type=str, action="store_true")
+    main_parser.add_argument("--zijies_update", type=bool, default=False)
 
     main_args = main_parser.parse_args()
 

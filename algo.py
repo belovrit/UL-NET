@@ -40,7 +40,8 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     print('Optimizing y_opt')
     for _ in range(iters_y_opt):
         pw = get_loglikelihood(get_prob, rule2groundings, rule2weight_idx,
-                               triplet2id, w.float(), y_opt, main_args)
+                               id2conf, id2triplet, kge_model, w.float(),
+                               y_opt, main_args)
         loss = -pw
         loss.backward()
         optimizer_y_opt.step()
@@ -72,15 +73,13 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
             y_pred = torch.squeeze(kge_model(triplet.h, triplet.r, triplet.t, main_args))
             # y_pred = torch.tensor(y_pred, dtype=torch.float32, device=main_args.device)
             y_pred = y_pred.float().detach().to(device=main_args.device)
-            y_true = torch.tensor([float(id2conf[0])], dtype=torch.float32,device=main_args.device)
+            y_true = torch.tensor([float(id2conf[tid])], dtype=torch.float32,device=main_args.device)
             loss += F.mse_loss(y_pred, y_true) / len(O_ids_local)
             O_y_pred[tid] = y_pred.detach()
-        try:
-            loss.backward()
-            optimizer_E_step.step()
-            print('loss applied')
-        except:
-            print('loss skipped')
+        loss.requires_grad=True
+        loss.backward()
+        optimizer_E_step.step()
+        print('loss applied')
         cur_batch += batch_size
         if cur_batch >= len(O_ids):
             cur_batch = 0
@@ -100,12 +99,9 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
             y_pred = y_pred.float().detach().to(device=main_args.device)
             loss += F.mse_loss(y_pred, y_opt[tid]) / len(H_ids_local)
             H_y_pred[tid-offset] = y_pred.detach()
-        try:
-            loss.backward()
-            optimizer_E_step.step()
-            print('loss applied')
-        except:
-            print('loss skipped')
+        loss.backward()
+        optimizer_E_step.step()
+        print('loss applied')
         cur_batch += batch_size
         if cur_batch >= len(H_ids):
             cur_batch = 0
@@ -170,7 +166,7 @@ def m_step(data_dict, id2betas, id2ystars, w, main_args):
             w[w_idx] += lr * accu_w_grad[w_idx]
         #print("M_step iteration {}: Loss = {}".format(i, loss))
 
-def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w, y_opt, main_args):
+def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2triplet, kge_model, w, y_opt, main_args):
     pw_memoized = torch.zeros_like(w.float(), device=main_args.device)
     for rule in rule2groundings:
         groundings = rule2groundings[rule]
@@ -182,7 +178,6 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
                 assert len(body) == 2
                 t1, t2 = body
                 id0, id1, id2 = head, t1, t2
-                #id0, id1, id2 = triplet2id[head], triplet2id[t1],triplet2id[t2]
                 ids0.append(int(id0))
                 ids1.append(int(id1))
                 ids2.append(int(id2))
@@ -190,7 +185,6 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
                 assert len(body) == 2
                 t1, t2 = body
                 id0, id1, id2 = head, t1, t2
-                #id0, id1, id2 = triplet2id[head], triplet2id[t1],triplet2id[t2]
                 ids0.append(int(id0))
                 ids1.append(int(id1))
                 ids2.append(int(id2))
@@ -203,23 +197,35 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
                 assert False
         if rule == 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
-            '''
-            l1 = torch.zeros_like(l0)
-            l2 = torch.zeros_like(l0)
-            for l, ids in zip([l1, l2], [ids0, ids1]):
-                for j, id in enumerate(ids):
-                    if id in id2conf:
-                        l[j] = id2conf[id]
-                    else:
-                        l[j] = get_prob(kge_model(...), main_args.alpha_beta)
-            '''
-            l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
-            l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
+            if main_args.zijies_update:
+                l1 = torch.zeros_like(l0)
+                l2 = torch.zeros_like(l0)
+                for l, ids in zip([l1, l2], [ids0, ids1]):
+                    for j, id in enumerate(ids):
+                        if id in id2conf:
+                            l[j] = id2conf[id]
+                        else:
+                            h,r,t = id2triplet[id]
+                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta)
+            else:
+                l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
+                l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
             grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0), main_args.device),l0), 'IMPLY', len(l0), main_args.device)
         elif rule == 'AcausesB_and_BcausesC_imply_AcausesC':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
-            l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
-            l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
+            if main_args.zijies_update:
+                l1 = torch.zeros_like(l0)
+                l2 = torch.zeros_like(l0)
+                for l, ids in zip([l1, l2], [ids0, ids1]):
+                    for j, id in enumerate(ids):
+                        if id in id2conf:
+                            l[j] = id2conf[id]
+                        else:
+                            h,r,t = id2triplet[id]
+                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta)
+            else:
+                l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
+                l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
             grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0), main_args.device),l0), 'IMPLY', len(l0), main_args.device)
         elif rule == 'notHidden':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
