@@ -145,7 +145,11 @@ class Tester(object):
 
         N = self.KGEModel.nentity  # pool of t: all possible ts
         for i in range(N):  # compute scores for all possible t
-            score_i = self.get_score(h, r, i, alpha_beta)
+            score_i = self.get_score(h, r, i, alpha_beta).item()
+            # print("--------------")
+            # print(type(score_i))
+            # print(type(scores))
+            # print("--------------")
             rankplus = (scores < score_i).astype(int)  # rank+1 if score<score_i
             ranks += rankplus
 
@@ -201,7 +205,6 @@ class Tester(object):
                 tw_dict = hr_map[h][r]  # {t:w}
                 tw_truth = [self.IndexScore(int(t), float(w)) for t, w in tw_dict.items()]
                 tw_truth.sort(reverse=True)  # descending on w
-                #print(tw_truth)
                 ndcg, exp_ndcg = self.ndcg(h, r, tw_truth, alpha_beta)  # nDCG with linear gain and exponential gain
                 ndcg_sum += ndcg
                 exp_ndcg_sum += exp_ndcg
