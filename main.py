@@ -21,7 +21,7 @@ if __name__ == '__main__':
     main_parser.add_argument("--lr", type=float, default=1e-3)
     main_parser.add_argument("--iters_m", type=int, default=1)
     main_parser.add_argument("--device", type=str, default="cpu")
-    main_parser.add_argument("--batch_size", type=int, default=640)
+    main_parser.add_argument("--batch_size", type=int, default=64)
     main_parser.add_argument("--load_model", type=str)
     main_parser.add_argument("--ranking", action="store_true")
 
