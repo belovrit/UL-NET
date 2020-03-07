@@ -35,8 +35,6 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     offset = num_observed
 
     # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
-
-
     optimizer_y_opt = torch.optim.Adam([y_opt], lr=5000*learning_rate)
     optimizer_y_opt.zero_grad()
     print('Optimizing y_opt')
@@ -51,7 +49,10 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         print('y_opt: {}'.format(get_prob(y_opt, alpha_beta)))
         print('--------------')
 
-    optimizer_E_step = torch.optim.Adam(kge_model.parameters(), lr=learning_rate)
+    optimizer_E_step = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, kge_model.parameters()),
+        lr=learning_rate)
+
     optimizer_E_step.zero_grad()
 
     O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
@@ -77,6 +78,7 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         try:
             loss.backward()
             optimizer_E_step.step()
+            print('loss applied')
         except:
             print('loss skipped')
         cur_batch += batch_size
@@ -101,6 +103,7 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         try:
             loss.backward()
             optimizer_E_step.step()
+            print('loss applied')
         except:
             print('loss skipped')
         cur_batch += batch_size
@@ -200,6 +203,16 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, triplet2id, w,
                 assert False
         if rule == 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
+            '''
+            l1 = torch.zeros_like(l0)
+            l2 = torch.zeros_like(l0)
+            for l, ids in zip([l1, l2], [ids0, ids1]):
+                for j, id in enumerate(ids):
+                    if id in id2conf:
+                        l[j] = id2conf[id]
+                    else:
+                        l[j] = get_prob(kge_model(...), main_args.alpha_beta)
+            '''
             l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
             l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
             grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0), main_args.device),l0), 'IMPLY', len(l0), main_args.device)
