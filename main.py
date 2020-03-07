@@ -10,19 +10,21 @@ if __name__ == '__main__':
     main_parser.add_argument("--data", type=str, default='cn15k',
                              help="the dir path where you store data")
     main_parser.add_argument("--preprocess", action="store_true")
-    main_parser.add_argument("--iters_em", type=int, default=1)
+    main_parser.add_argument("--iters_em", type=int, default=2)
     main_parser.add_argument("--model_name", type=str, default='TransE',
                              choices=['TransE', 'DistMult', 'ComplEx','RotatE'])
     main_parser.add_argument("--hidden_dim", type=int, default=16)
     main_parser.add_argument("--gamma", type=int, default=0.05)
-    main_parser.add_argument("--iters_y_opt", type=int, default=1)
-    main_parser.add_argument("--iters_e", type=int, default=1)
+    main_parser.add_argument("--iters_y_opt", type=int, default=2)
+    main_parser.add_argument("--iters_e", type=int, default=2)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
     main_parser.add_argument("--iters_m", type=int, default=1)
     main_parser.add_argument("--device", type=str, default="cpu")
     main_parser.add_argument("--batch_size", type=int, default=64)
     main_parser.add_argument("--load_model", type=str)
+    main_parser.add_argument("--ranking", type=str, action="store_true")
+
     main_args = main_parser.parse_args()
 
 
@@ -30,7 +32,6 @@ if __name__ == '__main__':
         workpath = main_args.load_model
         print("Loading trained model...")
         kge_model = load_trained_model(main_args.load_model)
-        #print(kge_model.state_dict())
     else:
         time = str(datetime.datetime.now()).replace(' ', '_')
         workpath = os.path.join(get_root_path(), 'record', time)
@@ -57,7 +58,7 @@ if __name__ == '__main__':
         # Initialize y_opt and w
         # w = torch.randn(len(data_dict['rules']), requires_grad=True, device=main_args.device) # load this from M-step
         w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                         dtype=torch.float32, device=main_args.device)
+                         dtype=torch.float32, device=main_args.device) # require_grad=True
         y_opt = torch.randn(len(data_dict['id2triplet']), dtype=torch.float32, requires_grad=True, device=main_args.device)
 
         print("Start training...")
@@ -66,7 +67,7 @@ if __name__ == '__main__':
             old_w = w
             id2betas, id2ystars = e_step(data_dict, main_args, w.detach(), y_opt, kge_model)
             w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                             dtype=torch.float32, device=main_args.device)
+                             dtype=torch.float32, device=main_args.device) # require_grad=True
             # w = torch.randn(len(data_dict['rules']), requires_grad=True,
             #                 device=main_args.device)
             # save_dict("id2betas_{}".format(i), id2betas, workpath)
@@ -86,6 +87,11 @@ if __name__ == '__main__':
     eval_result["MAE"] = tester.get_mae(main_args.alpha_beta)
     print("Mean Square Error: {}".format(eval_result["MSE"]))
     print("Mean Absolute Error: {}".format(eval_result["MAE"]))
+
+    if main_args.ranking:
+        tester.load_test_triplets_ranking_task(join(get_data_path(), main_args.data))
+        eval_result["MnDCG"] = tester.mean_ndcg(tester.hr_map, main_args.alpha_beta)
+
     save_eval_result(eval_result, workpath)
 
 
