@@ -1,7 +1,7 @@
 import os, gc, argparse, datetime
 from src.prepare_data import prepare_data
 from src.saver import *
-from algo import e_step, m_step
+from algo import e_step, m_step1, m_step2
 from eval import *
 
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     main_parser.add_argument("--device", type=str, default="cpu")
     main_parser.add_argument("--batch_size", type=int, default=640)
     main_parser.add_argument("--load_model", type=str)
-    main_parser.add_argument("--ranking", type=str, action="store_true")
+    main_parser.add_argument("--ranking", action="store_true")
 
     main_args = main_parser.parse_args()
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
         # Initialize y_opt and w
         # w = torch.randn(len(data_dict['rules']), requires_grad=True, device=main_args.device) # load this from M-step
         w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                         dtype=torch.float32, device=main_args.device) # require_grad=True
+                         dtype=torch.float32, device=main_args.device, requires_grad=True)
         y_opt = torch.randn(len(data_dict['id2triplet']), dtype=torch.float32, requires_grad=True, device=main_args.device)
 
         print("Start training...")
@@ -67,13 +67,14 @@ if __name__ == '__main__':
             old_w = w
             id2betas, id2ystars = e_step(data_dict, main_args, w.detach(), y_opt, kge_model)
             w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                             dtype=torch.float32, device=main_args.device) # require_grad=True
+                             dtype=torch.float32, device=main_args.device,
+                             requires_grad=True)
             # w = torch.randn(len(data_dict['rules']), requires_grad=True,
             #                 device=main_args.device)
             # save_dict("id2betas_{}".format(i), id2betas, workpath)
             # save_dict("id2ystars_{}".format(i), id2ystars, workpath)
             gc.collect()
-            m_step(data_dict, id2betas, id2ystars, w, main_args)
+            m_step2(data_dict, id2betas, id2ystars, w, main_args)
             # print(old_w)
             # print(w)
 
