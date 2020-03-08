@@ -185,48 +185,49 @@ def m_step2(data_dict, id2betas, id2ystars, w, main_args):
     optimizer_M_step.zero_grad()
 
     for i in range(iters):
-        loss = torch.tensor([0], dtype=torch.float32, device=main_args.device)
+
         for rule, allgroundings in rule2groundings.items():
             ground_size = len(allgroundings)
             w_idx = rule2weight_idx[rule]
-            random.shuffle(allgroundings)
-            for ground in tqdm(allgroundings[0:batch_size]):
+            #random.shuffle(allgroundings)
+            for ground in tqdm(allgroundings):
                 hidden = False
                 head_id = ground[0]
                 id2weights[head_id].append(w[w_idx])
-                # try:
-                #     conf_true = id2conf[head_id]
-                #     ystar = id2ystars[head_id]
-                #     accu_w_grad[w_idx] += (conf_true - ystar) / ground_size
-                #     loss += (conf_true - ystar) * (conf_true - ystar)
-                # except KeyError:
-                #     hidden = True
-                # if hidden:
-                #     beta = id2betas[head_id]
-                #     ystar = id2ystars[head_id]
-                #     pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
-                #     accu_w_grad[w_idx] += (pred_beta - ystar) / ground_size
-                #     loss += (pred_beta - ystar) * (pred_beta - ystar)
 
-            # update weights
-            #w[w_idx] += lr * accu_w_grad[w_idx]
-        # print("M_step iteration {}: Loss = {}".format(i, loss))
         for k, v in id2weights.items():
-            id2weights_n[k] = torch.sigmoid(torch.tensor(np.mean([x.detach().item() for x in v]), device=main_args.device))
+            id2weights_n[k] = torch.sigmoid(torch.mean(torch.stack(v))) #, device=main_args.device, requires_grad=True)
 
-        for hid, pred in id2weights_n.items():
-            conf_true = id2conf.get(hid)
-            y_star = id2ystars[hid]
-            if conf_true is not None:
-                loss += (conf_true - y_star) * (conf_true - y_star)
-            else:
-                beta = id2betas[hid]
-                pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
-                loss += (pred_beta - y_star) * (pred_beta - y_star)
-        loss.backward()
-        optimizer_M_step.step()
-        print('M-step loss: {}'.format(loss))
-        print('--------------')
+        id2weights_n_pool = list(id2weights_n.items())
+        random.shuffle(id2weights_n_pool)
+
+        cur_batch = 0
+        print("Optimizing Loss...")
+        while cur_batch < len(id2weights_n_pool):
+            loss = torch.tensor([0], dtype=torch.float32,
+                                device=main_args.device)
+            for hid, pred in id2weights_n_pool[cur_batch:cur_batch+batch_size]:
+                conf_true = id2conf.get(hid)
+                y_star = id2ystars[hid]
+                if conf_true is not None:
+                    loss += (y_star - pred) * (y_star - pred)
+                    # print("observed")
+                    # print("y_star = {}, pred = {}, conf = {}".format(y_star.item(), pred.item(), conf_true))
+                else:
+                    beta = id2betas[hid]
+                    pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
+                    loss += (y_star - pred) * (y_star - pred)
+                    # print("hidden")
+                    # print(y_star, pred)
+                # loss.requires_grad = True
+                loss.backward(retain_graph=True)
+                optimizer_M_step.step()
+                print(w)
+                print('M-step loss: {}'.format(loss))
+                print('--------------')
+
+            cur_batch += batch_size
+
 
 
 def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2triplet, kge_model, w, y_opt, main_args):
