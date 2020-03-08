@@ -55,7 +55,8 @@ class KGEModel(nn.Module):
 
     def forward(self, h, r, t, main_args, mode='simple'):
         cvtTensor = lambda x: torch.LongTensor([int(x)], device=main_args.device)
-        ho, ro, to = cvtTensor(h), cvtTensor(r), cvtTensor(t)
+        #ho, ro, to = cvtTensor(h), cvtTensor(r), cvtTensor(t)
+        ho, ro, to = torch.LongTensor([int(h)]), torch.LongTensor([int(r)]), torch.LongTensor([int(t)])
         model_func = {
             'TransE': self.TransE,
             'DistMult': self.DistMult,
