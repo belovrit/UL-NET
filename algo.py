@@ -41,7 +41,7 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     random.shuffle(O_ids)
     random.shuffle(H_ids)
     rule2weight_idx = data_dict['rule2weight_idx']
-    triplet2id = data_dict['triplet2id']
+    id2conf = data_dict['id2conf']
     id2triplet = data_dict['id2triplet']
 
     alpha_beta = main_args.alpha_beta
@@ -56,14 +56,16 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
     H_y_pred = torch.zeros(len(H_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
 
-    #########################################################################
-    # compute beta of observed triplets from KGE model
-    #########################################################################
     optimizer_E_step = torch.optim.Adam(
         filter(lambda p: p.requires_grad, kge_model.parameters()),
         lr=learning_rate)
-    #optimizer_E_step.zero_grad()
+    optimizer_y_opt = torch.optim.Adam([y_opt], lr=2000*learning_rate)
+
+    #########################################################################
+    # compute beta of observed triplets from KGE model
+    #########################################################################
     cur_batch = 0
+    optimizer_E_step.zero_grad()
     for _ in range(iters_e):
         print('computing KGE embeddings (observed)')
         # loss = torch.Tensor([0])
@@ -92,13 +94,23 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     #########################################################################
     # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
     #########################################################################
-    optimizer_y_opt = torch.optim.Adam([y_opt], lr=5000*learning_rate)
+    if main_args.zijies_update:
+        print('computing memoized scores for zj update')
+        y_memoized = torch.zeros(len(id2triplet), device=main_args.device)
+        for O_id in tqdm(O_ids):
+            y_memoized[O_id] = id2conf[O_id]
+        for H_id in tqdm(H_ids):
+            h,r,t = id2triplet[H_id]
+            y_memoized[H_id] = get_prob(kge_model(h, r, t, main_args), main_args.alpha_beta).detach()
+    else:
+        y_memoized = None
+
     optimizer_y_opt.zero_grad()
     print('Optimizing y_opt')
     for _ in range(iters_y_opt):
         pw = get_loglikelihood(get_prob, rule2groundings, rule2weight_idx,
                                id2conf, id2triplet, kge_model, w.float(),
-                               y_opt, main_args)
+                               y_opt, y_memoized, main_args)
         loss = -pw
         loss.backward()
         optimizer_y_opt.step()
@@ -107,12 +119,12 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         print('y_opt: {}'.format(get_prob(y_opt, alpha_beta)))
         print('--------------')
 
-    optimizer_E_step.zero_grad()
 
     #########################################################################
     # compute beta of hidden triplets from KGE model
     #########################################################################
     cur_batch = 0
+    optimizer_E_step.zero_grad()
     for _ in range(iters_e):
         print('computing KGE embeddings (hidden)')
         # loss = torch.Tensor([0])
@@ -248,7 +260,7 @@ def m_step2(data_dict, id2betas, id2ystars, w, main_args):
         print('--------------')
 
 
-def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2triplet, kge_model, w, y_opt, main_args):
+def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2triplet, kge_model, w, y_opt, y_memoized, main_args):
     pw_memoized = torch.zeros_like(w.float(), device=main_args.device)
     for rule in rule2groundings:
         groundings = rule2groundings[rule]
@@ -279,34 +291,18 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2tr
                 assert False
         if rule == 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
-            if main_args.zijies_update:
-                l1 = torch.zeros_like(l0)
-                l2 = torch.zeros_like(l0)
-                for l, ids in zip([l1, l2], [ids0, ids1]):
-                    for j, id in enumerate(tqdm(ids)):
-                        if id in id2conf:
-                            l[j] = id2conf[id]
-                        else:
-                            h,r,t = id2triplet[id]
-                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta).detach()
+            if y_memoized is not None:
+                l1 = y_memoized[ids1]
+                l2 = y_memoized[ids2]
             else:
                 l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
                 l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
             grounding_confidence = soft_logic((soft_logic((l1,l2),'AND', len(l0), main_args.device),l0), 'IMPLY', len(l0), main_args.device)
         elif rule == 'AcausesB_and_BcausesC_imply_AcausesC':
             l0 = get_prob(y_opt[ids0], main_args.alpha_beta)
-            if main_args.zijies_update:
-                l1 = torch.zeros_like(l0)
-                l2 = torch.zeros_like(l0)
-
-                for l, ids in zip([l1, l2], [ids0, ids1]):
-                    print(len(ids))
-                    for j, id in enumerate(tqdm(ids)):
-                        if id in id2conf:
-                            l[j] = id2conf[id]
-                        else:
-                            h,r,t = id2triplet[id]
-                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta).detach()
+            if y_memoized is not None:
+                l1 = y_memoized[ids1]
+                l2 = y_memoized[ids2]
             else:
                 l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
                 l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
