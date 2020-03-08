@@ -16,15 +16,15 @@ if __name__ == '__main__':
     main_parser.add_argument("--hidden_dim", type=int, default=16)
     main_parser.add_argument("--gamma", type=int, default=0.05)
     main_parser.add_argument("--iters_y_opt", type=int, default=2)
-    main_parser.add_argument("--iters_e", type=int, default=2)
+    main_parser.add_argument("--iters_e", type=int, default=100)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
     main_parser.add_argument("--iters_m", type=int, default=1)
     main_parser.add_argument("--device", type=str, default="cpu")
     main_parser.add_argument("--batch_size", type=int, default=64)
     main_parser.add_argument("--load_model", type=str)
-    main_parser.add_argument("--ranking", type=str, action="store_true")
-    main_parser.add_argument("--zijies_update", type=bool, default=False)
+    #main_parser.add_argument("--ranking", type=str, action="store_true")
+    main_parser.add_argument("--zijies_update", type=bool, default=True)
 
     main_args = main_parser.parse_args()
 
