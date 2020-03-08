@@ -1,3 +1,20 @@
+'''
+One Idea:
+First pre-compute the get_conf_score[id] for all O id
+...and kge_model[id] for all H id => save both into all id tensor and query from tensor
+This only needs to be done once before the y_opt optimization step.
+TODO:
+also move the current O optimization before the H optimization and y_opt optimization
+    -> we want to first get reasonable kge embeddings before applying y_opt
+
+memoized_score = torch.zeros(number_of_triples, device=main_args.device)
+for O_id in tqdm(O_ids):
+    memoized_score[O_id] = conf_score[O_id]
+for H_id in tqdm(H_ids):
+    memoized_score[H_id] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta).detach()
+
+'''
+
 import numpy as np
 import random
 import torch
@@ -5,6 +22,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from time import time
 from collections import defaultdict
+from time import time
 
 def get_beta(x, alpha_beta):
     beta = alpha_beta * torch.sigmoid(x)
@@ -35,32 +53,16 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
     num_observed = len(O_ids)
     offset = num_observed
 
-    # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
-    optimizer_y_opt = torch.optim.Adam([y_opt], lr=5000*learning_rate)
-    optimizer_y_opt.zero_grad()
-    print('Optimizing y_opt')
-    for _ in range(iters_y_opt):
-        pw = get_loglikelihood(get_prob, rule2groundings, rule2weight_idx,
-                               id2conf, id2triplet, kge_model, w.float(),
-                               y_opt, main_args)
-        loss = -pw
-        loss.backward()
-        optimizer_y_opt.step()
-        print('y-loss: {}'.format(pw))
-        print('w: {}'.format(w))
-        print('y_opt: {}'.format(get_prob(y_opt, alpha_beta)))
-        print('--------------')
-
-    optimizer_E_step = torch.optim.Adam(
-        filter(lambda p: p.requires_grad, kge_model.parameters()),
-        lr=learning_rate)
-
-    optimizer_E_step.zero_grad()
-
     O_y_pred = torch.zeros(len(O_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
     H_y_pred = torch.zeros(len(H_ids), requires_grad=True, device=main_args.device) # TODO: batch this!
 
-    # compute beta of hidden triplets from KGE model
+    #########################################################################
+    # compute beta of observed triplets from KGE model
+    #########################################################################
+    optimizer_E_step = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, kge_model.parameters()),
+        lr=learning_rate)
+    #optimizer_E_step.zero_grad()
     cur_batch = 0
     for _ in range(iters_e):
         print('computing KGE embeddings (observed)')
@@ -87,6 +89,29 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         print('E-loss (observed): {}'.format(loss))
         print('--------------')
 
+    #########################################################################
+    # Optimize y*: Optimizefrom(rule_dict, o_triplets, h_triplets, o2conf)
+    #########################################################################
+    optimizer_y_opt = torch.optim.Adam([y_opt], lr=5000*learning_rate)
+    optimizer_y_opt.zero_grad()
+    print('Optimizing y_opt')
+    for _ in range(iters_y_opt):
+        pw = get_loglikelihood(get_prob, rule2groundings, rule2weight_idx,
+                               id2conf, id2triplet, kge_model, w.float(),
+                               y_opt, main_args)
+        loss = -pw
+        loss.backward()
+        optimizer_y_opt.step()
+        print('y-loss: {}'.format(pw))
+        print('w: {}'.format(w))
+        print('y_opt: {}'.format(get_prob(y_opt, alpha_beta)))
+        print('--------------')
+
+    optimizer_E_step.zero_grad()
+
+    #########################################################################
+    # compute beta of hidden triplets from KGE model
+    #########################################################################
     cur_batch = 0
     for _ in range(iters_e):
         print('computing KGE embeddings (hidden)')
@@ -110,19 +135,13 @@ def e_step(data_dict, main_args, w, y_opt, kge_model):
         print('--------------')
 
     # save a data structure of id2beta dictionary
-    id2betas = {}
-    id2ystars = {}
     print('linking y_opts')
     t = time()
-    # for tid in tqdm(O_ids+H_ids):
-    #     id2ystars[tid] = get_prob(y_opt[tid].detach(), alpha_beta) #TODO: optimize away this code
     all_ids = O_ids + H_ids
     id2ystars = {tid: get_prob(y_opt[tid].detach(), alpha_beta) for tid in all_ids}
     print("linking y_opts: {} seconds".format(time() - t))
     print('linking betas')
     t = time()
-    # for tid in tqdm(H_ids):
-    #     id2betas[tid] = get_beta(H_y_pred[tid-offset].detach(), alpha_beta) #TODO: optimize away this code
 
     id2betas = {tid: get_beta(H_y_pred[tid-offset].detach(), alpha_beta) for tid in H_ids}
     print("linking betas: {} seconds".format(time() - t))
@@ -264,12 +283,12 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2tr
                 l1 = torch.zeros_like(l0)
                 l2 = torch.zeros_like(l0)
                 for l, ids in zip([l1, l2], [ids0, ids1]):
-                    for j, id in enumerate(ids):
+                    for j, id in enumerate(tqdm(ids)):
                         if id in id2conf:
                             l[j] = id2conf[id]
                         else:
                             h,r,t = id2triplet[id]
-                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta)
+                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta).detach()
             else:
                 l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
                 l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
@@ -279,13 +298,15 @@ def get_loglikelihood(get_prob, rule2groundings, rule2weight_idx, id2conf, id2tr
             if main_args.zijies_update:
                 l1 = torch.zeros_like(l0)
                 l2 = torch.zeros_like(l0)
+
                 for l, ids in zip([l1, l2], [ids0, ids1]):
-                    for j, id in enumerate(ids):
+                    print(len(ids))
+                    for j, id in enumerate(tqdm(ids)):
                         if id in id2conf:
                             l[j] = id2conf[id]
                         else:
                             h,r,t = id2triplet[id]
-                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta)
+                            l[j] = get_prob(kge_model(h,r,t,main_args), main_args.alpha_beta).detach()
             else:
                 l1 = get_prob(y_opt[ids1], main_args.alpha_beta)
                 l2 = get_prob(y_opt[ids2], main_args.alpha_beta)
