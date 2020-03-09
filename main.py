@@ -1,7 +1,7 @@
 import os, gc, argparse, datetime
 from src.prepare_data import prepare_data
 from src.saver import *
-from algo import e_step, m_step1, m_step2
+from algo import e_step, m_step1, m_step2, m_step3
 from eval import *
 
 
@@ -10,18 +10,18 @@ if __name__ == '__main__':
     main_parser.add_argument("--data", type=str, default='cn15k',
                              help="the dir path where you store data")
     main_parser.add_argument("--preprocess", action="store_true")
-    main_parser.add_argument("--iters_em", type=int, default=2)
+    main_parser.add_argument("--iters_em", type=int, default=3)
     main_parser.add_argument("--model_name", type=str, default='TransE',
                              choices=['TransE', 'DistMult', 'ComplEx','RotatE'])
-    main_parser.add_argument("--hidden_dim", type=int, default=16)
-    main_parser.add_argument("--gamma", type=int, default=0.05)
-    main_parser.add_argument("--iters_y_opt", type=int, default=1)
-    main_parser.add_argument("--iters_e", type=int, default=1)
+    main_parser.add_argument("--hidden_dim", type=int, default=200)
+    main_parser.add_argument("--gamma", type=int, default=18)
+    main_parser.add_argument("--iters_y_opt", type=int, default=30)
+    main_parser.add_argument("--iters_e", type=int, default=50)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
     main_parser.add_argument("--lr", type=float, default=1e-3)
-    main_parser.add_argument("--iters_m", type=int, default=1)
+    main_parser.add_argument("--iters_m", type=int, default=30)
     main_parser.add_argument("--device", type=str, default="cuda")
-    main_parser.add_argument("--batch_size", type=int, default=640)
+    main_parser.add_argument("--batch_size", type=int, default=1024)
     main_parser.add_argument("--load_model", type=str)
     main_parser.add_argument("--ranking", action="store_true")
     main_parser.add_argument("--zijies_update", type=bool, default=False)
@@ -58,24 +58,36 @@ if __name__ == '__main__':
 
         # Initialize y_opt and w
         # w = torch.randn(len(data_dict['rules']), requires_grad=True, device=main_args.device) # load this from M-step
-        w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                         dtype=torch.float32, device=main_args.device, requires_grad=True)
+
+        # w = torch.tensor(init_weights(data_dict["rule2weight_idx"]),
+        #                  dtype=torch.float32,
+        #                  device=main_args.device,
+        #                  requires_grad=True)
+
+        w = torch.tensor(np.random.uniform(0.0, 0.5, len(data_dict['rules'])),
+                         dtype=torch.float32, device=main_args.device,
+                         requires_grad=True)
         y_opt = torch.randn(len(data_dict['id2triplet']), dtype=torch.float32, requires_grad=True, device=main_args.device)
 
         print("Start training...")
         for i in range(main_args.iters_em):
             print("EM iteration {}".format(i))
             old_w = w
+            print("Right Before e_step")
             id2betas, id2ystars = e_step(data_dict, main_args, w.detach(), y_opt, kge_model)
-            w = torch.tensor(np.random.uniform(-0.005, 0.005, len(data_dict['rules'])),
-                             dtype=torch.float32, device=main_args.device,
-                             requires_grad=True)
-            # save_dict("id2betas_{}".format(i), id2betas, workpath)
-            # save_dict("id2ystars_{}".format(i), id2ystars, workpath)
+            # w = torch.tensor(init_weights(data_dict["rule2weight_idx"]),
+            #                  dtype=torch.float32,
+            #                  device=main_args.device,
+            #                  requires_grad=True)
+            w = torch.tensor(
+                np.random.uniform(0.0, 0.5, len(data_dict['rules'])),
+                dtype=torch.float32, device=main_args.device,
+                requires_grad=True)
+
             gc.collect()
-            m_step2(data_dict, id2betas, id2ystars, w, main_args)
-            # print(old_w)
-            # print(w)
+            m_step3(data_dict, id2betas, id2ystars, w, main_args)
+            print(old_w)
+            print(w)
 
         save_trained_model(workpath, kge_model)
 

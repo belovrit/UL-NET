@@ -27,8 +27,15 @@ def set_default(obj):
     raise TypeError
 
 
-def init_weights(rules):
-    return np.random.uniform(-0.005, 0.005, len(rules))
+def init_weights(rules_to_w_idx):
+    w_numpy = np.zeros(len(rules_to_w_idx))
+
+    for rule, w_idx in rules_to_w_idx.items():
+        if rule == 'notHidden':
+            w_numpy[w_idx] = np.random.normal(10, 0.05)
+        else:
+            w_numpy[w_idx] = np.random.normal(1, 0.05)
+    return w_numpy
 
 
 def sigmoid(x):
