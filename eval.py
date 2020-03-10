@@ -4,6 +4,8 @@ from src.utils import *
 import time
 from KGEModel import *
 from algo import get_beta, get_prob
+from tqdm import tqdm
+from collections import defaultdict
 
 class Tester(object):
     class IndexScore:
@@ -31,8 +33,13 @@ class Tester(object):
         self.KGEModel = KGEModel
         # below for test data
         self.test_triplets = []
+        self.id2mln_pred = []
+        self.triplet2id = {}
+        self.id2mln_prob = {}
         self.mln_lambda = mln_lambda
         self.hr_map = {}
+        self.num_not_hidden = 0
+        self.num_no_mln = 0
 
     def load_test_triplets_conf_task(self, load_path):
         file_path = join(load_path, 'test.tsv')
@@ -84,13 +91,58 @@ class Tester(object):
             count += len(self.hr_map[h])
         print('Loaded ranking test queries. Number of (h,r,?t) queries: %d' % count)
 
+    def compute_mln_pred(self, data_dict, w):
+        rule2groundings = data_dict['rule2groundings']
+        rule2weight_idx = data_dict['rule2weight_idx']
+        self.triplet2id = data_dict['triplet2id']
+        id2weights = defaultdict(list)
+        for rule, allgroundings in rule2groundings.items():
+            ground_size = len(allgroundings)
+            w_idx = rule2weight_idx[rule]
+
+            for ground in tqdm(allgroundings):
+                hidden = False
+                head_id = ground[0]
+                id2weights[head_id].append(w[w_idx])
+
+        for k, v in id2weights.items():
+            self.id2mln_prob[k] = sigmoid(np.mean(v))
+
+        # id2mln_pred = []
+        # for h, r, t, c in self.test_triplets:
+        #     triplet = Triplet(h, r, t)
+        #     tid = self.triplet2id[triplet]
+        #     self.id2mln_pred.append(self.id2mln_prob[tid])
+
+    def get_single_mln_pred(self, h, r, t):
+        triplet = Triplet(str(h), str(r), str(t))
+        tid = self.triplet2id.get(triplet)
+        if tid is None:
+            self.num_not_hidden += 1
+            return 0.0
+        else:
+            pred = self.id2mln_prob.get(tid)
+            if pred is None:
+                self.num_no_mln += 1
+                return 0.0
+            else:
+                return pred
+
     def get_score(self, h, r, t, alpha_beta):
-        score = get_prob(self.KGEModel.predict(int(h), int(r), int(t)), alpha_beta)
+        if self.mln_lambda == 0:
+            score = get_prob(self.KGEModel.predict(int(h), int(r), int(t)), alpha_beta).item()
+        else:
+            kge_score = get_prob(self.KGEModel.predict(int(h), int(r), int(t)), alpha_beta).item()
+            mln_score = self.get_single_mln_pred(int(h), int(r), int(t))
+            if mln_score > 0.5:
+                score = (1 - self.mln_lambda) * kge_score + self.mln_lambda * mln_score
+            else:
+                score = (1 - self.mln_lambda) * kge_score - self.mln_lambda * mln_score
+
         return score
 
     def get_score_batch(self, test_triplets, alpha_beta):
-        kge = self.KGEModel
-        scores = [get_prob(kge.predict(int(h), int(r), int(t)), alpha_beta).item() for h, r, t, c in test_triplets]
+        scores = [self.get_score(int(h), int(r), int(t), alpha_beta) for h, r, t, c in test_triplets]
         return scores
 
     def get_mse(self, alpha_beta, verbose=True, save_dir='', epoch=0):
@@ -101,7 +153,7 @@ class Tester(object):
         mse = np.sum(np.square(scores - c_batch))
         mse = mse / N
 
-        return mse.item(), scores
+        return mse.item(), scores, self.num_not_hidden, self.num_no_mln
 
     def get_mae(self, alpha_beta, verbose=False, save_dir='', epoch=0):
         test_triplets = self.test_triplets
@@ -125,7 +177,7 @@ class Tester(object):
 
         N = self.KGEModel.nentity  # pool of t: all possible ts
         for i in range(N):  # compute scores for all possible t
-            score_i = self.get_score(h, r, i, alpha_beta).item()
+            score_i = self.get_score(h, r, i, alpha_beta)
             rankplus = (scores < score_i).astype(int)  # rank+1 if score<score_i
             ranks += rankplus
 

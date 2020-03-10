@@ -3,6 +3,7 @@ import pickle, csv, json
 import torch
 import glob
 from KGEModel import KGEModel
+import numpy as np
 
 def save_preprocessed(dict_obj, save_path):
     path = join(save_path, 'data_dict.pickle')
@@ -53,8 +54,10 @@ def get_model_params(load_path):
             hidden_dim = value
         if param == 'gamma':
             gamma = value
+        if param == 'iters_em':
+            iters_em = value
 
-    return model_name, int(n_entities), int(n_relations), int(hidden_dim), float(gamma)
+    return model_name, int(n_entities), int(n_relations), int(hidden_dim), float(gamma), int(iters_em)
 
 
 def load_trained_model(load_path):
@@ -62,33 +65,33 @@ def load_trained_model(load_path):
     f = join(load_path, 'main_args.txt')
     files = glob.glob(p)
     best_trained_model_path = max(files, key=getctime)
-    model_name, n_entities, n_relations, hidden_dim, gamma = get_model_params(f)
+    model_name, n_entities, n_relations, hidden_dim, gamma, iters_em = get_model_params(f)
     trained_model = KGEModel(model_name, n_entities, n_relations, hidden_dim, gamma)
     trained_model.load_state_dict(torch.load(best_trained_model_path))
-    return trained_model
+    return trained_model, iters_em
 
 
 def save_eval_result(dict_obj, save_path):
     path = join(save_path, 'eval_result.json')
     print("Saving eval result...")
     with open(path, 'w') as fp:
-        json.dump(dict_obj, fp)
+        json.dump(dict_obj, fp, indent=4)
 
 
-def save_rule_weights(obj, save_path):
-    path = join(save_path, 'weights.txt')
+def save_rule_weights(obj, i, save_path):
+    path = join(save_path, 'weights_{}.txt'.format(i))
     with open(path, 'w') as fp:
         writer = csv.writer(fp, delimiter='\t')
         writer.writerow(obj)
 
 
-def load_rule_weights(save_path):
-    path = join(save_path, 'weights.txt')
+def load_rule_weights(save_path, iters_em):
+    path = join(save_path, 'weights_{}.txt'.format(iters_em-1))
     weights = []
     with open(path, 'r') as fp:
         reader = csv.reader(fp, delimiter='\t')
         for ln in reader:
-            weights = list(ln)
+            weights = np.array(ln).astype(float)
     return weights
 
 
