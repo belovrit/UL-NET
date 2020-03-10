@@ -192,7 +192,6 @@ def m_step1(data_dict, id2betas, id2ystars, w, main_args):
                     ystar = id2ystars[head_id]
                     pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
                     accu_w_grad[w_idx] += (pred_beta - ystar) / ground_size
-                    # print(pred_beta - ystar)
                     loss += (pred_beta - ystar) * (pred_beta - ystar)
             # update weights
             w[w_idx] += lr * accu_w_grad[w_idx]
@@ -218,7 +217,6 @@ def m_step2(data_dict, id2betas, id2ystars, w, main_args):
         for rule, allgroundings in rule2groundings.items():
             ground_size = len(allgroundings)
             w_idx = rule2weight_idx[rule]
-            #random.shuffle(allgroundings)
             for ground in tqdm(allgroundings):
                 hidden = False
                 head_id = ground[0]
@@ -262,15 +260,11 @@ def m_step2(data_dict, id2betas, id2ystars, w, main_args):
                 y_star = id2ystars[hid]
                 if conf_true is not None:
                     loss += (conf_true - pred) * (conf_true - pred)
-                    # print("observed")
-                    # print("y_star = {}, pred = {}, conf = {}".format(y_star.item(), pred.item(), conf_true))
                 else:
                     beta = id2betas[hid]
                     pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
                     loss += (y_star - pred) * (y_star - pred)
-                    # print("hidden")
-                    # print(y_star, pred)
-                # loss.requires_grad = True
+
                 loss.backward(retain_graph=True)
                 optimizer_M_step.step()
                 print(w)
@@ -306,23 +300,7 @@ def m_step3(data_dict, id2betas, id2ystars, w, main_args):
                 hidden = False
                 head_id = ground[0]
                 id2weights[head_id].append(w[w_idx])
-                # try:
-                #     conf_true = id2conf[head_id]
-                #     ystar = id2ystars[head_id]
-                #     accu_w_grad[w_idx] += (conf_true - ystar) / ground_size
-                #     loss += (conf_true - ystar) * (conf_true - ystar)
-                # except KeyError:
-                #     hidden = True
-                # if hidden:
-                #     beta = id2betas[head_id]
-                #     ystar = id2ystars[head_id]
-                #     pred_beta = (alpha_beta - beta - 1) / (alpha_beta - 2)
-                #     accu_w_grad[w_idx] += (pred_beta - ystar) / ground_size
-                #     loss += (pred_beta - ystar) * (pred_beta - ystar)
 
-            # update weights
-            #w[w_idx] += lr * accu_w_grad[w_idx]
-        # print("M_step iteration {}: Loss = {}".format(i, loss))
         for k, v in id2weights.items():
             id2weights_n[k] = torch.sigmoid(torch.tensor(np.mean([x.detach().item() for x in v]), device=main_args.device)).detach().requires_grad_(True)
 

@@ -13,8 +13,8 @@ if __name__ == '__main__':
     main_parser.add_argument("--iters_em", type=int, default=3)
     main_parser.add_argument("--model_name", type=str, default='TransE',
                              choices=['TransE', 'DistMult', 'ComplEx','RotatE'])
-    main_parser.add_argument("--hidden_dim", type=int, default=200)
-    main_parser.add_argument("--gamma", type=int, default=18)
+    main_parser.add_argument("--hidden_dim", type=int, default=300)
+    main_parser.add_argument("--gamma", type=int, default=10)
     main_parser.add_argument("--iters_y_opt", type=int, default=30)
     main_parser.add_argument("--iters_e", type=int, default=50)
     main_parser.add_argument("--alpha_beta", type=float, default=1.0)
@@ -22,17 +22,19 @@ if __name__ == '__main__':
     main_parser.add_argument("--iters_m", type=int, default=30)
     main_parser.add_argument("--device", type=str, default="cuda")
     main_parser.add_argument("--batch_size", type=int, default=1024)
-    main_parser.add_argument("--load_model", type=str)
+    main_parser.add_argument("--load_model_path", type=str)
     main_parser.add_argument("--ranking", action="store_true")
     main_parser.add_argument("--zijies_update", type=bool, default=False)
+    main_parser.add_argument("--include_mln", type=bool, default=False)
 
     main_args = main_parser.parse_args()
 
 
-    if main_args.load_model is not None:
-        workpath = main_args.load_model
+    if main_args.load_model_path is not None:
+        workpath = main_args.load_model_path
         print("Loading trained model...")
-        kge_model = load_trained_model(main_args.load_model)
+        kge_model = load_trained_model(main_args.load_model_path)
+        loaded_weights = load_rule_weights(main_args.load_model_path)
     else:
         time = str(datetime.datetime.now()).replace(' ', '_')
         workpath = os.path.join(get_root_path(), 'record', time)
@@ -57,7 +59,6 @@ if __name__ == '__main__':
 
 
         # Initialize y_opt and w
-        # w = torch.randn(len(data_dict['rules']), requires_grad=True, device=main_args.device) # load this from M-step
 
         # w = torch.tensor(init_weights(data_dict["rule2weight_idx"]),
         #                  dtype=torch.float32,
@@ -86,14 +87,13 @@ if __name__ == '__main__':
 
             gc.collect()
             m_step3(data_dict, id2betas, id2ystars, w, main_args)
-            print(old_w)
-            print(w)
+            save_rule_weights(w.item(), workpath)
 
         save_trained_model(workpath, kge_model)
 
     print("Evaluating...")
     eval_result = {}
-    tester = Tester(kge_model)
+    tester = Tester(kge_model, main_args.mln_lambda)
     tester.load_test_triplets_conf_task(join(get_data_path(), main_args.data))
     eval_result["MSE"], eval_result["scores"] = tester.get_mse(main_args.alpha_beta)
     eval_result["MAE"] = tester.get_mae(main_args.alpha_beta)

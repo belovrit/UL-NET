@@ -1,6 +1,3 @@
-import torch
-import numpy as np
-import pandas as pd
 import csv
 from os.path import join
 from src.utils import *
@@ -30,10 +27,11 @@ class Tester(object):
         def __str__(self):
             return "(index: %d, w:%.3f)" % (self.index, self.score)
 
-    def __init__(self, KGEModel):
+    def __init__(self, KGEModel, mln_lambda):
         self.KGEModel = KGEModel
         # below for test data
         self.test_triplets = []
+        self.mln_lambda = mln_lambda
         self.hr_map = {}
 
     def load_test_triplets_conf_task(self, load_path):
@@ -41,7 +39,6 @@ class Tester(object):
         fi = open(file_path)
         rd = csv.reader(fi, delimiter='\t')
         count = 0
-        #self.test_triplets = []
         for ln in rd:
             h, r, t, c = ln
             self.test_triplets.append([h, r, t, float(c)])
@@ -52,18 +49,8 @@ class Tester(object):
             else:
                 self.hr_map[h][r][t] = float(c)
             count += 1
-        #self.test_triplets = np.array(self.test_triplets)
+
         print("Loaded confidence prediction (h,r,t,?c) queries: {} queries".format(count))
-
-        # i = 0
-        # for h in self.hr_map:
-        #     print(self.hr_map[h])
-        #     print(len(self.hr_map[h]))
-        #     count += len(self.hr_map[h])
-        #     i += 1
-        #     if i == 1:
-        #         break
-
 
     def load_test_triplets_ranking_task(self, load_path):
         file_path = join(load_path, 'test.tsv')
@@ -91,13 +78,7 @@ class Tester(object):
                 # update hr_map
                 if h in self.hr_map and r in self.hr_map[h]:
                     self.hr_map[h][r][t] = float(c)
-        # i = 0
-        # for h in self.hr_map:
-        #     print(self.hr_map[h])
-        #     count += len(self.hr_map[h])
-        #     i += 1
-        #     if i == 1:
-        #         break
+
         count = 0
         for h in self.hr_map:
             count += len(self.hr_map[h])
@@ -116,7 +97,6 @@ class Tester(object):
         test_triplets = self.test_triplets
         N = len(test_triplets)
         c_batch = np.array([triplet[3] for triplet in test_triplets])
-        #c_batch = np.random.rand(len(test_triplets))
         scores = self.get_score_batch(test_triplets, alpha_beta)
         mse = np.sum(np.square(scores - c_batch))
         mse = mse / N
@@ -146,10 +126,6 @@ class Tester(object):
         N = self.KGEModel.nentity  # pool of t: all possible ts
         for i in range(N):  # compute scores for all possible t
             score_i = self.get_score(h, r, i, alpha_beta).item()
-            # print("--------------")
-            # print(type(score_i))
-            # print(type(scores))
-            # print("--------------")
             rankplus = (scores < score_i).astype(int)  # rank+1 if score<score_i
             ranks += rankplus
 

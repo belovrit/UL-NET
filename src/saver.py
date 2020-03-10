@@ -75,6 +75,23 @@ def save_eval_result(dict_obj, save_path):
         json.dump(dict_obj, fp)
 
 
+def save_rule_weights(obj, save_path):
+    path = join(save_path, 'weights.txt')
+    with open(path, 'w') as fp:
+        writer = csv.writer(fp, delimiter='\t')
+        writer.writerow(obj)
+
+
+def load_rule_weights(save_path):
+    path = join(save_path, 'weights.txt')
+    weights = []
+    with open(path, 'r') as fp:
+        reader = csv.reader(fp, delimiter='\t')
+        for ln in reader:
+            weights = list(ln)
+    return weights
+
+
 def save_dict(name, dict_obj, save_path):
     filename = "{}.pickle".format(name)
     path = join(save_path, filename)
