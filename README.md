@@ -12,3 +12,4 @@ you can skipp the preprocessing step by calling without the flag: (various flags
 
     python main.py
    
+During the experiment, there will be folders generated, namely the save and record folder. The save folder contains the preprocessed data for later runs, and the record folder contains the experiment results of the model, timestamped. Evaluation result is saved in .json format in the timestamped folder.
