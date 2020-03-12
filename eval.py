@@ -33,7 +33,6 @@ class Tester(object):
         self.KGEModel = KGEModel
         # below for test data
         self.test_triplets = []
-        self.id2mln_pred = []
         self.triplet2id = {}
         self.id2mln_prob = {}
         self.mln_lambda = mln_lambda
@@ -91,28 +90,34 @@ class Tester(object):
             count += len(self.hr_map[h])
         print('Loaded ranking test queries. Number of (h,r,?t) queries: %d' % count)
 
-    def compute_mln_pred(self, data_dict, w):
+    def compute_mln_pred(self, data_dict, id2ystars, w):
         rule2groundings = data_dict['rule2groundings']
         rule2weight_idx = data_dict['rule2weight_idx']
         self.triplet2id = data_dict['triplet2id']
+        id2triplet = data_dict['id2triplet']
         id2weights = defaultdict(list)
         for rule, allgroundings in rule2groundings.items():
-            ground_size = len(allgroundings)
             w_idx = rule2weight_idx[rule]
-
             for ground in tqdm(allgroundings):
-                hidden = False
-                head_id = ground[0]
-                id2weights[head_id].append(w[w_idx])
+                if rule == 'ArelatedToB_and_BrelatedToC_imply_ArelatedToC' or \
+                        rule == 'AcausesB_and_BcausesC_imply_AcausesC':
+                    head_id = ground.head
+                    b_id1, b_id2 = ground.body
+                    id2weights[head_id].append(w[w_idx] * id2ystars[b_id1].item() * id2ystars[b_id2].item())
+                else:
+                    head_id = ground.head
+                    id2weights[head_id].append(w[w_idx] * (1 - id2ystars[head_id].item()))
 
         for k, v in id2weights.items():
-            self.id2mln_prob[k] = sigmoid(np.mean(v))
-
-        # id2mln_pred = []
-        # for h, r, t, c in self.test_triplets:
-        #     triplet = Triplet(h, r, t)
-        #     tid = self.triplet2id[triplet]
-        #     self.id2mln_pred.append(self.id2mln_prob[tid])
+            triplet = id2triplet[k]
+            rel = triplet.r
+            if rel == '0':
+                w_idx = rule2weight_idx['ArelatedToB_and_BrelatedToC_imply_ArelatedToC']
+            elif rel == '22':
+                w_idx = rule2weight_idx['AcausesB_and_BcausesC_imply_AcausesC']
+            else:
+                w_idx = rule2weight_idx['notHidden']
+            self.id2mln_prob[k] = np.sum(np.array(v)) / (w[w_idx] * len(v))
 
     def get_single_mln_pred(self, h, r, t):
         triplet = Triplet(str(h), str(r), str(t))
@@ -133,11 +138,21 @@ class Tester(object):
             score = get_prob(self.KGEModel.predict(int(h), int(r), int(t)), alpha_beta).item()
         else:
             kge_score = get_prob(self.KGEModel.predict(int(h), int(r), int(t)), alpha_beta).item()
-            mln_score = self.get_single_mln_pred(int(h), int(r), int(t))
-            if mln_score > 0.5:
-                score = (1 - self.mln_lambda) * kge_score + self.mln_lambda * mln_score
+            mln_raw = self.get_single_mln_pred(int(h), int(r), int(t))
+            if mln_raw >= 0.001:
+                mln_score = shifted_sigmoid(mln_raw)
             else:
-                score = (1 - self.mln_lambda) * kge_score - self.mln_lambda * mln_score
+                mln_score = mln_raw
+            if mln_score > 0.5:
+                score = (1-self.mln_lambda) * kge_score + self.mln_lambda * mln_score
+            else:
+                if mln_score == 0.0 and self.mln_lambda < 1.0:
+                    score = kge_score
+                else:
+                    if self.mln_lambda < 1.0:
+                        score = kge_score - self.mln_lambda * mln_score
+                    else:
+                        score = mln_score
 
         return score
 
@@ -176,12 +191,13 @@ class Tester(object):
         ranks = np.ones(len(ts), dtype=int)  # initialize rank as all 1
 
         N = self.KGEModel.nentity  # pool of t: all possible ts
+        #all_scores = [self.get_score(h, r, i, alpha_beta) for i in range(N)]
         for i in range(N):  # compute scores for all possible t
             score_i = self.get_score(h, r, i, alpha_beta)
             rankplus = (scores < score_i).astype(int)  # rank+1 if score<score_i
             ranks += rankplus
 
-        return ranks
+        return ranks #, all_scores
 
     def ndcg(self, h, r, tw_truth, alpha_beta):
         """

@@ -56,8 +56,10 @@ def get_model_params(load_path):
             gamma = value
         if param == 'iters_em':
             iters_em = value
+        if param == 'alpha_beta':
+            alpha_beta = value
 
-    return model_name, int(n_entities), int(n_relations), int(hidden_dim), float(gamma), int(iters_em)
+    return model_name, int(n_entities), int(n_relations), int(hidden_dim), float(gamma), int(iters_em), float(alpha_beta)
 
 
 def load_trained_model(load_path):
@@ -65,10 +67,10 @@ def load_trained_model(load_path):
     f = join(load_path, 'main_args.txt')
     files = glob.glob(p)
     best_trained_model_path = max(files, key=getctime)
-    model_name, n_entities, n_relations, hidden_dim, gamma, iters_em = get_model_params(f)
+    model_name, n_entities, n_relations, hidden_dim, gamma, iters_em, alpha_beta = get_model_params(f)
     trained_model = KGEModel(model_name, n_entities, n_relations, hidden_dim, gamma)
     trained_model.load_state_dict(torch.load(best_trained_model_path))
-    return trained_model, iters_em
+    return trained_model, iters_em, alpha_beta
 
 
 def save_eval_result(dict_obj, save_path):
@@ -98,7 +100,7 @@ def load_rule_weights(save_path, iters_em):
 def save_dict(name, dict_obj, save_path):
     filename = "{}.pickle".format(name)
     path = join(save_path, filename)
-    print("Saving pickle...")
+    print("Saving {} pickle...".format(name))
     with open(path, 'wb') as fp:
         pickle.dump(dict_obj, fp)
 
@@ -106,7 +108,7 @@ def save_dict(name, dict_obj, save_path):
 def load_dict(name, load_path):
     filename = "{}.pickle".format(name)
     path = join(load_path, filename)
-    print("Loading pickle...")
+    print("Loading {} pickle...".format(name))
     with open(path, 'rb') as fp:
         data_dict = pickle.load(fp)
 

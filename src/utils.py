@@ -42,6 +42,10 @@ def sigmoid(x):
     return 1 / (1 + math.exp(-x))
 
 
+def shifted_sigmoid(x):
+    return 1 / (1 + math.exp(-(x-0.3)))
+
+
 def write_all_triplet(save_path):
     return
 
