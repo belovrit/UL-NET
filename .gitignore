@@ -7,3 +7,7 @@ src/__pycache__/
 data_load.py
 .ipynb_checkpoints/
 *.ipynb
+data/nl27k
+data/ppi5k
+data/UKGE_dataset.zip
+data/UKGE_dataset
