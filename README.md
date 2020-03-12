@@ -14,8 +14,8 @@ The original data can be found here at: https://drive.google.com/file/d/1UJQ8hnq
     python main.py --preprocess
    
 The above command will preprocess the dataset and start the training. It will also evaluate the model at the end.
-You only have to run with --preprocess flag once. The preprocessed data will be saved in save folder. Afterward, 
-you can skipp the preprocessing step by calling without the flag: (various flags can be looked up in main.py)
+You only have to run with --preprocess flag once. The preprocessed data will be saved in ```save``` folder. Afterward, 
+you can skip the preprocessing step by calling without the flag: (various flags can be looked up in main.py)
 
     python main.py
    
